@@ -34,14 +34,14 @@ README.md                         根路由，只负责选择路径
 | 设计 API、模块边界、失败与关闭语义 | [设计职责](docs/10-design/README.md) | 当前文件已覆盖；若形成独立决策，另记稳定 ADR |
 | 编写或修改实现 | [编码职责](docs/20-coding/README.md) | [C++](docs/20-coding/cpp.md)、[文档与注释](docs/20-coding/documentation.md) |
 | 评审代码、设计或文档 | [Review 职责](docs/30-review/README.md) | [生命周期与扩展](docs/30-review/lifecycle.md) |
-| 设计行为与回归用例 | [用例设计](docs/40-testcase/README.md) | [并发与生命周期](docs/40-testcase/concurrency.md) |
+| 设计、精简行为与回归用例 | [用例设计](docs/40-testcase/README.md) | [并发与生命周期](docs/40-testcase/concurrency.md)、[按阶段运行](docs/40-testcase/execution.md) |
 
 “需要时”由场景入口中的触发条件决定，不按仓库里出现了某个目录就全量加载。例如：
 
 - 改一个普通 C++ 值类型：原则 → 编码 → C++；不读生命周期专项。
 - 改异步关闭和回调注销：原则 → 设计或编码 → 生命周期相关专项。
 - 做纯文档 Review：原则 → Review → 文档专项；不因为同仓有网络代码而读取并发专项。
-- 只运行已经确定的测试命令：不用重新设计测试；发现覆盖缺口时才进入用例入口。
+- 只决定开发中或合入时跑哪些测试：直接读[按阶段运行](docs/40-testcase/execution.md)，不用重新设计测试；发现覆盖缺口时才进入用例入口。
 
 ## 这套规范负责什么
 

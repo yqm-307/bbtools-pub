@@ -54,7 +54,7 @@
 
 ## 5. 测试接入
 
-沿用项目已选测试框架；测试源通常位于 `tests/<module>/Test_<行为>.cc`，每个可独立构建为目标，CTest 名称按模块和行为注册。按实际性质标记 `smoke`、`unit`、`integration`、`live`、`perf`，不把标签当作证据本身。
+沿用项目已选测试框架；测试源通常位于 `tests/<module>/Test_<行为>.cc`，每个可独立构建为目标，CTest 名称按模块和行为注册。按实际性质标记 `smoke`、`unit`、`integration`、`live`、`perf`，不把标签当作证据本身。CTest 名以模块为前缀时，标签和名称过滤同时生效，开发中可用 `ctest --test-dir build -L smoke -R '^<module>\.'` 只选某个模块的冒烟。
 
 检查构建开关、CTest 注册集和 CI 执行路径；空过滤、缺失二进制、`Not Run` 或被管道吞掉的失败都不能算通过。用例行为由 `40-testcase` 负责，本节只定义 C++ 文件、目标和注册约定。
 
