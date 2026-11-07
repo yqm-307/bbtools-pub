@@ -1,0 +1,46 @@
+# Runnable CLI configuration; distinct from the larger proposed design schema.
+schema_version = 1
+quality_policy = "warn" # warn | fail; analysis failures always exit 2
+
+[scope]
+include = ["bbt/**/*.hpp", "bbt/**/*.cc"]
+exclude = ["**/generated/**", "**/*.pb.cc"]
+
+[structural]
+backend_version = "1.25.0"
+
+[structural.thresholds]
+cognitive_complexity = 25
+cyclomatic_complexity = 15
+nloc = 100
+parameter_count = 6
+
+[semantic]
+rubric_version = "bbt-semantic-v1"
+confirmations = 2
+min_delta = 1
+
+[semantic.axes.U]
+enabled = true
+warn_at = 2
+
+[semantic.axes.R]
+enabled = true
+warn_at = 2
+
+[semantic.axes.A]
+enabled = true
+warn_at = 2
+
+[semantic.axes.L]
+enabled = true
+warn_at = 2
+
+[semantic.axes.G]
+enabled = true
+warn_at = 2
+
+[limits]
+max_files = 2000
+max_file_bytes = 1048576
+max_total_bytes = 33554432
