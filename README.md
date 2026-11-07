@@ -31,7 +31,7 @@ README.md                         根路由，只负责选择路径
 
 | 当前任务 | 入口 | 需要时再展开 |
 |---|---|---|
-| 设计 API、模块边界、失败与关闭语义 | [设计职责](docs/10-design/README.md) | 当前文件已覆盖；若形成独立决策，另记稳定 ADR |
+| 设计 API、模块边界、失败与关闭语义 | [设计职责](docs/10-design/README.md) | 复杂度指标与告警口径按设计入口展开；若形成独立决策，另记稳定 ADR |
 | 编写或修改实现 | [编码职责](docs/20-coding/README.md) | [C++](docs/20-coding/cpp.md)、[文档与注释](docs/20-coding/documentation.md) |
 | 评审代码、设计或文档 | [Review 职责](docs/30-review/README.md) | [生命周期与扩展](docs/30-review/lifecycle.md) |
 | 设计、精简行为与回归用例 | [用例设计](docs/40-testcase/README.md) | [并发与生命周期](docs/40-testcase/concurrency.md)、[按阶段运行](docs/40-testcase/execution.md) |
@@ -50,6 +50,10 @@ README.md                         根路由，只负责选择路径
 正例：一次修改涉及一个异步回调。作者先读原则和编码入口，再按入口条件展开 C++ 规则，最后在变更说明中给出回调寿命和异常路径证据。
 
 反例：看到 `review-lifecycle` 文件名就要求所有人全量阅读，或读完规则后把“应该安全”写成“已经测试通过”。前者增加无关理解成本，后者把规范意图冒充成执行证据。
+
+## 本地工程工具
+
+- [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
 
 ## 维护规则
 

@@ -1,0 +1,131 @@
+# 完整设计的建议配置（拟议 schema v1；首版 CLI 不读取本文件）。
+# 可运行子集另见仓库根路径 tools/complexity/config.example.toml。
+# 阈值和预算都是起步建议，未经项目校准；不要当作现成 CLI 配置使用。
+# 模板按 bbt C++ 仓库给路径，各仓复制后修改。相对路径均相对于仓库根。
+# 合并：内置默认 -> 本文件 -> overrides（依次）-> 显式参数；对象逐键覆盖，数组整体替换。
+schema_version = 1
+profile = "cpp-framework"
+quality_policy = "warn"          # warn | fail；不影响 analysis_error 的非零退出
+output_formats = ["json", "markdown", "github-warning"]
+
+[scope]
+include = ["bbt/**/*.hpp", "bbt/**/*.cc"]
+exclude = ["**/detail/generated/**", "**/*.pb.h", "**/*.pb.cc", "vendor/**", "build*/**"]
+public_headers = ["bbt/**/*.hpp"]
+internal_headers = ["**/detail/**", "**/impl/**"] # 从 public_headers 中扣除
+consumer_include = ["bbt/**", "examples/**", "tests/**"]
+test_paths = ["tests/**"]        # 允许查测试替身，但不混入生产消费者计数
+module_roots = ["bbt/infra/*"]   # 路径匹配定义模块，不能用 namespace 数量替代
+
+[comparison]
+base_ref = "origin/main"        # 运行时解析 merge-base 并记录实际 SHA
+base_mode = "merge_base"        # merge_base | explicit_commit
+baseline_file = ".complexity/baseline.json"
+ignore_file = ".complexity/ignore.toml"
+new_repository_mode = "inventory" # 无历史基线时列存量，不能自动写成 ignore
+
+[evidence]
+compile_commands = "build/compile_commands.json" # 仓库按实际构建目录覆盖
+contract_paths = ["AGENTS.md", "docs/architecture/**", "docs/decisions/**", "docs/guides/**"]
+require_complete_build_matrix = false # false：只报告已扫描构建配置，未覆盖部分仍须列出
+required_layers = ["structural"] # 启用语义层且必须完成时可再加入 semantic
+required_coverage = 0.0          # [0,1]；0 允许 partial，仍需报告分母和未评估单位
+
+[structural]
+enabled = true
+backend = "lizard"
+backend_version = "1.25.0"      # 与前期测量保持一致；升级后重新建立可比基线
+cognitive_extension = true
+warning_mode = "new_or_worsened_above_threshold"
+metrics = ["cognitive_complexity", "cyclomatic_complexity", "nloc", "parameter_count"]
+
+[structural.thresholds]
+cognitive_complexity = 25       # > 25 才越线，不代表人的理解成本有确定单位
+cyclomatic_complexity = 15
+nloc = 100                      # 工具定义的有效行数，不是编辑器物理行数
+parameter_count = 6
+
+[footprint]
+enabled = false                 # C++ 语法单元实现及校准完成后才开启
+record = ["added", "deleted", "net", "churn"]
+warning = false                 # 单凭增减量不发语义 warning
+
+[semantic]
+enabled = false                 # 配好模型并明确启用后运行；关闭时显示 disabled，不显示通过
+rubric_version = "bbt-semantic-v1" # 对应设计文档中的五维 0–3 锚点
+warn_at = 2                     # 每维可覆盖；after_level >= warn_at
+min_delta = 1                   # 同根因的最低等级增量；新增根因另判
+confirmations = 2               # 1 或 2；2=主评估+仅对候选做一次复核，不循环投票
+reverse_presentation_on_confirmation = true
+include_uncertain = true        # 保留争议/缺证据条目，不作为已确认 warning
+custom_rubric_files = []        # 可选仓内 rubric：稳定 ID、定义、0–3 锚点、反例、所需证据
+
+[semantic.selection]
+changed_public_contracts = true # 即使函数很短也可进入评估
+changed_types = true
+changed_function_capabilities = true
+structural_hotspots = true
+format_only = false             # 契约注释变化不属于纯排版
+
+[semantic.axes.U]
+enabled = true
+warn_at = 2                     # 使用负担
+
+[semantic.axes.R]
+enabled = true
+warn_at = 2                     # 职责混杂
+
+[semantic.axes.A]
+enabled = true
+warn_at = 2                     # 抽象负担
+
+[semantic.axes.L]
+enabled = true
+warn_at = 2                     # 状态与时序负担
+
+[semantic.axes.G]
+enabled = true
+warn_at = 2                     # 承诺扩张
+
+[semantic.model]
+provider = ""                   # 启用时必填；按已授权服务配置，不在 pub 固定 provider
+model = ""                      # 启用时必填；优先固定模型版本，记录实际返回身份
+api_key_env = ""                # 若服务需要凭据，只填环境变量名；不能写凭据值
+
+[semantic.model.parameters]
+temperature = 0.0               # 建议参数，不保证重复推理确定；不支持时显式报告
+
+[semantic.budget]
+max_units = 12                  # 每次受影响能力数量上限；超出项必须出现在 coverage 中
+max_requests = 24               # 同单位候选合批复核；失败也消耗预算
+max_context_files_per_unit = 12
+max_call_depth = 2
+max_input_tokens_per_request = 24000
+max_output_tokens_per_request = 4000
+concurrency = 2
+timeout_seconds = 90
+
+[ignore_policy]
+allow_wildcards = false         # 宽泛例外即使启用，也要展示范围并附理由
+stale_action = "needs_review"   # 证据/契约/评估版本变化后不能继续自动忽略
+
+[calibration]
+suggested_pairs = 20            # 先做人审标注；调参与验证样例分开
+min_precision = 0.80            # 工程起点，不是论文结论；报告原始分子/分母
+min_repeat_agreement = 0.90
+
+# 可选路径覆盖，默认不放宽任何规则。以下是语法示意，启用前需说明依据。
+# [[overrides]]
+# paths = ["bbt/infra/example/**"]
+# reason = "此模块的公开接口由协议固定，参数数限制单独处理；需附契约引用。"
+# [overrides.structural.thresholds]
+# parameter_count = 8
+
+# ignore 条目位于 comparison.ignore_file；以下只是字段示意，不是有效例外。
+# [[ignore]]
+# finding_id = "<报告生成的稳定 ID>"
+# rule = "semantic.A"
+# unit = "<声明的规范符号 ID>"
+# evidence_digest = "<关联代码、调用者、契约与评估版本的指纹>"
+# reason = "单实现接口是隔离第三方类型的边界，删除后会把其类型暴露给消费者。"
+# expires_on = "YYYY-MM-DD"     # 可省略；代码/证据变化仍会要求复核
