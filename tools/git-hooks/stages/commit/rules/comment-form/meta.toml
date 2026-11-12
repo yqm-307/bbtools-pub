@@ -1,0 +1,6 @@
+id = "comment-form"
+stage = "commit"
+kind = "auto"
+title = "新增或修改的注释不符合注释形态规范"
+fix = "按规范改写报告中的注释：说明 WHY，公开声明用约定的 Doxygen 形态；改完重新 git add"
+docs = "docs/20-coding/documentation.md"

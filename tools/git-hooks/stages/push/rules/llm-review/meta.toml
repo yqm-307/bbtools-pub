@@ -1,0 +1,6 @@
+id = "llm-review"
+stage = "push"
+kind = "attested"
+title = "缺少基于 LLM 的代码审查证据"
+fix = "先对 BASE..代码 commit 的完整改动做基于 LLM 的代码审查（按 pub 审查规范），再在 ticket 的 checks 里补 id 为 llm-review 的项：status=pass，summary 写结论，evidence 写 reviewer 与 scope"
+docs = "docs/30-review/README.md"

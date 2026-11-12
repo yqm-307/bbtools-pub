@@ -1,0 +1,15 @@
+# 消费仓路径：.config/bbt-git-hooks.toml。省略项用默认值，未知键报错。
+schema_version = 1
+timeout_seconds = 60
+
+[commit]
+rules = ["whitespace", "format", "comment-form", "template-layout"]
+
+[push]
+rules = ["review-ticket", "llm-review", "format", "secrets"]
+
+[scope]
+exclude = [] # 示例：["bbt/coroutine/utils/lockfree/*"]
+
+[format]
+binary = "clang-format"

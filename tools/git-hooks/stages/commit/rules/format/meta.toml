@@ -1,0 +1,6 @@
+id = "format"
+stage = "commit"
+kind = "auto"
+title = "暂存的 C/C++ 文件不符合 .clang-format"
+fix = "对报告中的文件运行 clang-format -i，重新 git add 后再提交"
+docs = "docs/20-coding/cpp.md"

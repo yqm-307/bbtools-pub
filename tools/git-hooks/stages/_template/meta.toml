@@ -1,0 +1,8 @@
+# 必填且不可多余：id 与目录名一致，stage 为 commit 或 push，kind 为 auto（hook 现场检查）或 attested（只核对提交的证据）。
+# fix 写给 agent：失败后下一步具体做什么；docs 写 pub 仓库内的规范路径。
+id = "example"
+stage = "push"
+kind = "auto"
+title = "一句话说明检查什么"
+fix = "失败后具体怎么办"
+docs = "docs/20-coding/README.md"

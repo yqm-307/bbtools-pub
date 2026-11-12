@@ -1,83 +1,60 @@
+/**
+ * @file ClassLayout.hpp
+ * @brief 类布局示例：构造与析构、公开接口、私有方法、私有数据分别成块。
+ */
 #pragma once
 
-// 伪代码示例：类的声明布局与 Doxygen 排版。不参与编译，规则见 cpp.md §3.1、documentation.md §6。
-// 声明与实现严格分离：类体只放声明，getter 的函数体见 ClassLayout.cc。
+#include <cstddef>
+#include <functional>
+#include <vector>
 
 /**
- * @brief 带进度的数据读取器。
+ * @brief 演示类声明和注释层次的进度读取器，不代表完整的数据读取协议。
  */
 class Reader {
-    // 第一块：public，写给使用者看的接口
+public:
+    Reader() {}
+
+    ~Reader() {}
 
 public:
-    // 构造、析构、拷贝、移动放最前
-    /**
-     * @brief 构造示例读取器。
-     */
-    Reader();
-
-    /**
-     * @brief 移动构造示例读取器。
-     *
-     * @param other 被移动的读取器。
-     */
-    Reader(Reader&& other);
-
-    /**
-     * @brief 禁用复制构造。
-     *
-     * @param other 原读取器；本类型不支持复制。
-     */
-    Reader(const Reader& other) = delete;
-
-    /**
-     * @brief 销毁示例读取器。
-     */
-    ~Reader();
-
-    /**
-     * @name Read 系
-     * @brief 读取已到达的数据，提供多种输出形态。
-     *
-     * 共享语义：失败时不写输出、不消费数据；成功返回前数据已移交。
-     * @{
-     */
-    void Read(char* out, int size);  ///< @param out 输出区 @param size 容量
-    void Read(std::string& out);     ///< @param out 追加到末尾
-    void Read(Buffer& out);          ///< @param out 目标缓冲
-    size_t Read();                   ///< @return 丢弃的字节数
-    std::string ReadNByte(size_t n); ///< @param n 字节数 @return 不足 n 时为已有部分
-    /** @} */
-
-    // 另一组功能：进度观察，与 Read 系空一行
     /**
      * @brief 当前已读取的字节数。
      *
      * @return 已读取的字节数。
      */
-    size_t Progress() const;
+    std::size_t Progress() const { return m_progress; }
 
     /**
-     * @brief 是否已读完。
+     * @brief 累计进度，并在启用通知时调用进度回调。
      *
-     * @return 已读完时为 true，否则为 false。
+     * @param n 本次新增的字节数。
+     * @pre 累计结果不超过 std::size_t 的表示范围。
      */
-    bool IsDone() const;
-
-    // 第二块：private，内部功能接口
+    void Advance(std::size_t n);
 
 private:
-    // 构造析构需要隐藏时放这里，例如：Reader(Token);
-    void _HookOnData();
-    void _AdvanceProgress(size_t n);
+    /**
+     * @brief 内部空钩子，用于展示私有短函数的紧凑写法。
+     */
+    void _HookOnData() {}
 
-    // 第三块：private，成员变量单独一块，按功能聚合，组间空一行
+    /**
+     * @brief 更新内部计数并分发进度通知。
+     *
+     * @param n 本次新增的字节数。
+     */
+    void _AdvanceProgress(std::size_t n);
 
 private:
-    // 进度控制
-    size_t m_progress;
-    ProgressData m_data;
+    std::size_t m_progress{0};
+    bool m_notify{true};                           // 关闭后仍累计进度，但不发送通知。
+    std::function<void(std::size_t)> m_onProgress; // 在 Advance 的调用线程同步执行。
 
-    // 状态标志
-    bool m_isDone;
+    /**
+     * 读取器独占的缓冲存储。借用其中元素不延长存储寿命；
+     * 扩容或销毁后，原有指针、引用和迭代器可能失效。
+     * 当前示例只展示复杂成员的说明位置，不实现缓冲读写。
+     */
+    std::vector<char> m_data;
 };

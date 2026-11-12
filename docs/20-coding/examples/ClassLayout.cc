@@ -1,11 +1,18 @@
-// 伪代码示例：与 ClassLayout.hpp 配套，即使只返回一个成员，实现也写在这里。
+/**
+ * @file ClassLayout.cc
+ * @brief 类布局示例的非平凡实现；空函数和单语句访问器保留在主头。
+ */
+#include "ClassLayout.hpp"
 
-size_t Reader::Progress() const
+void Reader::Advance(std::size_t n)
 {
-    return m_progress;
+    _AdvanceProgress(n);
+    _HookOnData();
 }
 
-bool Reader::IsDone() const
+void Reader::_AdvanceProgress(std::size_t n)
 {
-    return m_isDone;
+    m_progress += n;
+    if (m_notify && m_onProgress)
+        m_onProgress(m_progress);
 }

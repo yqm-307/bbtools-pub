@@ -29,7 +29,7 @@
 - 公开类型有可定位的 `.hpp`；内聚小类型可以共处，不因类数机械拆文件。存在非内联实现时配 `.cc`，接口与命名空间、目录保持一致。
 - 公开头不泄漏内部类型、第三方物理栈、异常类型或线程模型。无法隔离时明确兼容影响并在 Review 中核对。公共头的文档承诺必须和可观察实现一致。
 - 头文件使用 `#pragma once`，include 按对应头、标准库、项目公共头、子模块头组织；避免依赖传递 include 让调用者“碰巧能编译”。
-- 声明与实现严格分离：类体内只放声明，哪怕是返回一个成员的 getter 也写在实现里，让类体保持简洁、可当接口目录读。实现放 `.cc`；header-only 和模板放同模块 `impl/XxxImpl.hpp`，由公开头末尾包含。纯算法、类型工具和无状态小组件可 header-only；稳定 ABI、重状态、I/O 或编译成本需要时保留编译单元。不要为减少文件数把不同责任揉成一个头。
+- 声明与实现按职责分离：非模板的非平凡实现放 `.cc`；模板、必须头内可见的实现和确实短小的内联函数可留在头文件，模板实现放同目录的 `__TXxx.hpp`，由主头末尾包含。空构造、空析构、单语句访问器和短小转发函数不机械外移；复杂实现仍保持类体外定义，让类体可当接口目录读。纯算法、类型工具和无状态小组件可 header-only；稳定 ABI、重状态、I/O 或编译成本需要时保留编译单元。不要为减少文件数把不同责任揉成一个头。
 
 正例：公共 RPC 头只暴露协议契约和稳定错误类型，HTTP 具体类型留在实现或适配层；调用者无需知道内部传输栈。
 
@@ -48,27 +48,38 @@
 ```cpp
 class T {
 public:
-    T();
-    T(T&&);
-    T(const T&);
-    ~T();
+    T() {}
 
-    // 功能接口，按功能聚合
+    /**
+     * @brief 使用初始容量构造对象。
+     *
+     * @param capacity 初始容量。
+     */
+    explicit T(size_t capacity);
+
+    ~T() {}
+
+public:
+    int Progress() const { return m_progress; }
+    void Run();
 
 private:
     void _HookXxx();
 
 private:
-    size_t m_progress;
-    ProgressData m_data;
+    size_t m_progress{0};
+    bool m_is_flag{false}; // 关闭后仍保留当前进度。
 
-    bool m_is_flag;
+    /**
+     * 复杂状态的所有权和失效条件写在成员上方，避免把重要约束压缩到行尾。
+     */
+    ProgressData m_data;
 };
 ```
 
-完整示例见 `examples/ClassLayout.hpp` 与 `examples/ClassLayout.cc`（伪代码，不参与编译）。
+类布局示例见 `examples/ClassLayout.hpp` 与 `examples/ClassLayout.cc`（两文件可配对编译）；同族函数的 Doxygen 分组另见 `examples/FunctionFamily.hpp`。
 
-反例：getter 的函数体写在类体里；公开接口、内部函数和成员变量混排在同一个 `private:` 里；同一功能的成员散落在各处。
+反例：把带锁、带时序或多阶段的实现塞进类体；公开接口、内部函数和成员变量混排在同一个 `private:` 里；同一功能的成员散落在各处。
 
 ## 3.2 类设计：易用与谨慎抽象
 
