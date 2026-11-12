@@ -13,7 +13,8 @@ AccessModifierOffset: -4
 PointerAlignment: Left
 ReferenceAlignment: Left
 BreakBeforeBinaryOperators: NonAssignment
-AllowShortFunctionsOnASingleLine: None
+# 允许空构造、空析构和短小内联函数保留紧凑形态；非平凡实现仍放在类外或 .cc。
+AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortLambdasOnASingleLine: Inline
