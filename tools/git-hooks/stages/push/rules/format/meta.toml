@@ -1,0 +1,6 @@
+id = "format"
+stage = "push"
+kind = "auto"
+title = "待推送的 C/C++ 改动不符合 .clang-format"
+fix = "对报告中的文件运行 clang-format -i 并提交修复；已提交的旧 commit 需 amend 或 fixup 后重新审查、重新生成 ticket 再推送"
+docs = "docs/20-coding/cpp.md"

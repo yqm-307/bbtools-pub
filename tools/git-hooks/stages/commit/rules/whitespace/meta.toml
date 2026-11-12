@@ -1,0 +1,6 @@
+id = "whitespace"
+stage = "commit"
+kind = "auto"
+title = "暂存内容有空白错误"
+fix = "修掉报告中的行尾空白、混用缩进等问题后重新 git add 并提交（可先用 git diff --cached --check 自查）"
+docs = "docs/20-coding/README.md"

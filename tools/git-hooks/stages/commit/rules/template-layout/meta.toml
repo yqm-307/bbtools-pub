@@ -1,0 +1,6 @@
+id = "template-layout"
+stage = "commit"
+kind = "auto"
+title = "模板实现文件布局不符合规范"
+fix = "把模板实现移到 __TXxx.hpp，不新增 impl/ 目录或 *Impl.hpp；改完重新 git add"
+docs = "docs/20-coding/cpp.md"
