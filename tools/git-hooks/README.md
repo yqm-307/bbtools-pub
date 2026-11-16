@@ -83,7 +83,7 @@ commit 读取本次 index 生成的不可变 tree（兼容 `git commit --only <p
 FAIL llm-review  [E-LLM-REVIEW-MISSING]  缺少基于 LLM 的代码审查证据 (attested)
   问题：<ticket 路径>: checks 里没有 id 为 llm-review 的检查项
   怎么办：先对 BASE..代码 commit 的完整改动做基于 LLM 的代码审查……
-  规范（pub 仓库）：docs/30-review/README.md
+  规范（pub 仓库）：docs/cpp/build-and-test.md
   已通过：review-ticket    未通过：llm-review (attested)    未运行：format, secrets
 ```
 

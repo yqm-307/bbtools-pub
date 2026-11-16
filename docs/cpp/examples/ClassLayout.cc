@@ -6,11 +6,11 @@
 
 void Reader::Advance(std::size_t n)
 {
-    _AdvanceProgress(n);
-    _HookOnData();
+    AdvanceProgress(n);
+    HookOnData();
 }
 
-void Reader::_AdvanceProgress(std::size_t n)
+void Reader::AdvanceProgress(std::size_t n)
 {
     m_progress += n;
     if (m_notify && m_onProgress)

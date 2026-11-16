@@ -37,14 +37,14 @@ private:
     /**
      * @brief 内部空钩子，用于展示私有短函数的紧凑写法。
      */
-    void _HookOnData() {}
+    void HookOnData() {}
 
     /**
      * @brief 更新内部计数并分发进度通知。
      *
      * @param n 本次新增的字节数。
      */
-    void _AdvanceProgress(std::size_t n);
+    void AdvanceProgress(std::size_t n);
 
 private:
     std::size_t m_progress{0};

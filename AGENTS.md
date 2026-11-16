@@ -2,7 +2,7 @@
 
 ## 定位
 
-本仓是 bbtools 各仓共用的开发规范与本地工程工具：设计、编码、Review、用例设计、长程任务工作流的判断规范，以及复杂度打分器和本地 Git hooks。不承载任何仓库私有规则、业务契约或运行时代码。
+本仓是 bbtools 各仓共用的家族约定与本地工程工具：在 bbt-agent-toolkit 的通用规范（`third-party/bbt-agent-toolkit` 的 `standards/` 与角色方法 `agents/`）之上，按语言写 bbtools 家族特有的写法与取值，以及复杂度打分器和本地 Git hooks。不承载单个仓库的私有规则、业务契约或运行时代码。
 
 各消费仓（`bbtools-coroutine`、`bbtools-infra`、`bbt-framework`）通过 submodule 或并列检出引用本仓；与消费仓自己的 `AGENTS.md` 或 `docs/` 冲突时以消费仓为准。
 
@@ -17,9 +17,9 @@
 
 ## 本仓特有规则
 
-- 规范写给所有消费仓：表达保持抽象通用，不绑定某个消费仓；技术专项（如 C++）放进对应职责目录；容易模糊的规则补正例和反例。仓库私有规则写回该仓自己的 `AGENTS.md`。
+- 本仓只写 bbtools 家族特有的约定，按语言放 `docs/<lang>/`，不绑定某个消费仓；去掉家族专名仍成立的通用规则写进 toolkit，本仓只链接并写清覆盖或补充；容易模糊的规则补正例和反例。仓库私有规则写回该仓自己的 `AGENTS.md`。
 - 同一规则只留一个完整正文，其他地方用短句指向它；新增专项前先确认已有文件无法承载。改目录或文件名后，同步 `README.md` 的路径，并检查链接都存在、引用方向只向下（见 README「先看引用方向」）。
-- 消费仓无论用 submodule 还是并列检出，都只能引用本仓 `main` 已合入的提交（submodule 固定到该提交）；未合入的改动和工作树未提交内容不能被引用，也不能当作规范证据。
+- 消费仓无论用 submodule 还是并列检出，都只能引用本仓 `main` 已合入的提交（submodule 固定到该提交）；未合入的改动和工作树未提交内容不能被引用，也不能当作规范证据。本仓引用 toolkit 同理：submodule 只固定到 toolkit `main` 已合入的提交。
 - 工具改动的验证：改 hooks 跑 `python3 -m unittest discover -s tools/git-hooks/tests -v`；改复杂度打分器跑 `python -m unittest discover -s tools/complexity/tests -v`（环境见其 README）。hooks 测试只在临时目录建自己的仓库和 bare remote，complexity 测试只用临时源码、报告和配置文件，都不碰真实远端。工具未接入 CI 前，不把本地结果表述为 CI 结果。
 - 纯文档改动的最低验证：`git diff --check` 加链接存在性检查。「读过规范」不算构建、测试或 Review 通过。
 
