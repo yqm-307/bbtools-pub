@@ -4,6 +4,15 @@ import re
 from runner import git
 
 
+def contexts(ctx):
+    if 'updates' not in ctx:
+        yield ctx
+        return
+    from pushed import candidates
+    for info in candidates(ctx):
+        yield {'config': ctx['config'], 'base': info['base'], 'tree': info['tip']}
+
+
 def files(ctx, kinds='ACMR'):
     names = git('diff', '--name-only', '-z', '--no-renames', f'--diff-filter={kinds}',
                 ctx['base'], ctx['tree'], '--').stdout.split('\0')

@@ -1,0 +1,9 @@
+id = "T101"
+interface = "cpp"
+kind = "auto"
+title = "复杂对象暴露可变状态"
+fix = "人工核对候选，不自动删除或改名"
+docs = "tools/lint/README.md"
+default_enabled = true
+[options]
+fields = 10

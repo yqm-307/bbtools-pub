@@ -1,0 +1,9 @@
+id = "T401"
+interface = "cpp"
+kind = "auto"
+title = "静态转发壳候选"
+fix = "人工核对候选，不自动删除或改名"
+docs = "tools/lint/README.md"
+default_enabled = true
+[options]
+forwarders = 2

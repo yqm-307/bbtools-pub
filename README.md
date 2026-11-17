@@ -28,7 +28,13 @@
 ### 工具 → tools/
 
 - 复杂度打分器：`tools/complexity/`
+- 可组合 lint（全量清单与 hook）：[tools/lint/README.md](tools/lint/README.md)
 - 本地 Git hooks：`tools/git-hooks/`
+
+工具应可复用，规则应可组合，不绑定消费仓。
+每条规则独立目录，共用 core；同一源码检查支持全量扫描与 hook 改动文件两种跑法。
+各仓用一份配置选规则、阈值、排除项与 hook 阻断级别。
+新增规则只需复制模板并在配置中加入 ID；机制与扩展说明统一见 [lint 入口](tools/lint/README.md)。
 
 ## 开工与测试前的核对
 
@@ -72,7 +78,7 @@
 ## 本地工程工具
 
 - [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
-- [本地 Git hooks](tools/git-hooks/README.md)：commit 机械检查、push 前核对随仓库提交的 review ticket 并现场检查格式与密钥；规则有统一的 meta 与报错协议，首错即停，支持 `--skip-rules`；仓库适配写在 `.config/bbt-git-hooks.toml`。
+- [本地 Git hooks](tools/git-hooks/README.md)：保留 commit/push 入口及旧配置兼容；规则与配置机制统一见 [lint](tools/lint/README.md)。
 
 ## 门禁
 

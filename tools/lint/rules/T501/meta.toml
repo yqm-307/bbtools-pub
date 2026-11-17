@@ -1,0 +1,8 @@
+id = "T501"
+interface = "cpp"
+kind = "auto"
+title = "内部历史版本命名候选"
+fix = "人工核对候选，不自动删除或改名"
+docs = "tools/lint/README.md"
+default_enabled = true
+[options]
