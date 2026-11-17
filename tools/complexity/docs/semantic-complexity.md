@@ -2,7 +2,7 @@
 
 **状态：评估口径设计，已有首版本地 CLI；未接入 CI、未校准语义准确率。** 本文定义完整目标口径；当前实现边界及可用配置以仓库根路径 `tools/complexity/README.md` 为准。建议值不是研究证明的质量分界线。
 
-**何时读**：设计工程复杂度检测、评估公共 API 与框架抽象、解释复杂度告警时。建议配置见 [semantic-complexity.toml](examples/semantic-complexity.toml)，字段是拟议配置协议，不是已有工具的命令或功能。
+**何时读**：设计工程复杂度检测、评估公共 API 与框架抽象、解释复杂度告警时。建议配置见 [semantic-complexity.toml](semantic-complexity.toml)，字段是拟议配置协议，不是已有工具的命令或功能。
 
 ## 1. 结论与目标
 
@@ -119,7 +119,7 @@ LLM 只在启用并配置模型后参与。默认按同一目标对比前后版�
 
 ## 8. 建议配置与 CI 行为
 
-[建议 TOML](examples/semantic-complexity.toml) 集中保存阈值、维度开关、范围、模型、资源上限与策略。pub 维护设计与默认模板，各仓保存自己的配置、baseline、ignore；将来共享检测器应固定版本消费，不依赖浮动 main。
+[建议 TOML](semantic-complexity.toml) 集中保存阈值、维度开关、范围、模型、资源上限与策略。pub 维护设计与默认模板，各仓保存自己的配置、baseline、ignore；将来共享检测器应固定版本消费，不依赖浮动 main。
 
 配置优先级：工具同版本内置默认值 → 仓库配置 → 按声明顺序匹配的路径 overrides → 本次显式参数。对象逐键合并，数组整体替换。报告保存最终配置及其哈希，并单列会降低覆盖/告警强度的覆盖项。首版不提供网络远程配置继承。
 

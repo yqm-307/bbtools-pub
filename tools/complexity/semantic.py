@@ -34,7 +34,7 @@ def prepare(root, unit, scenario, groups, config, base=None):
                 require(total <= limits['max_total_bytes'], 'Context byte budget exceeded')
                 files.append({'path': path, 'role': role, 'version': version, 'content': text, 'sha256': text_hash(text)})
     require(files, 'No evidence files')
-    design = Path(__file__).resolve().parents[2] / 'docs/10-design/semantic-complexity.md'
+    design = Path(__file__).resolve().parents[2] / 'tools/complexity/docs/semantic-complexity.md'
     rubric = read_text(design).split('## 4. ', 1)[1].split('## 5. ', 1)[0]
     packet = {'schema_version': 1, 'kind': 'semantic_packet', 'unit': unit, 'scenario': scenario,
               'rubric_version': config['semantic']['rubric_version'], 'rubric': rubric,

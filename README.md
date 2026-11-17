@@ -1,30 +1,34 @@
-# bbtools 共用开发规范
+# bbtools 共用开发规范（根路由）
 
-这份仓库把共用原则、场景职责和风险专项放在不同层级。阅读从本文件开始，沿一条向下的路径展开；读过且版本未变的上层内容可以复用，不需要反复加载。
+这份仓库把 bbtools 家族特有的开发规范与本地工程工具聚在一起；通用语言规范与角色方法已迁出，消费仓通过 `third-party/bbt-agent-toolkit/`（submodule，由协调者稍后添加，链接暂时无法解析属预期）引用。
 
 ## 先看引用方向
 
-文档目录有固定的六层编号：
+引用只能向下，不得反向：
 
-```text
-README.md                         根路由，只负责选择路径
-└── docs/00-principles/           共用原则，定义判断依据
-    ├── 10-design/                设计职责
-    ├── 20-coding/                编码职责及其 C++、文档专项
-    ├── 30-review/                Review 职责及其生命周期专项
-    ├── 40-testcase/              用例设计职责及其并发专项
-    └── 50-workflow/              长程任务的多智能体工作流职责
-```
+1. 根 `README.md` 指向本仓家族特有规范与工具入口；通用部分指向 `third-party/bbt-agent-toolkit/standards/` 与 `third-party/bbt-agent-toolkit/agents/`。
+2. 本仓入口只指向自己目录中的文件。
+3. 同一规则只留一个完整正文，其他地方用短句说明适用层级，不复制整段。
 
-实际引用只允许向下：
+### 通用 → toolkit
 
-1. 根 `README.md` 指向共用原则和场景入口。
-2. 场景入口只指向自己目录中的专项文件。
-3. 原则文件不回链根路由，也不指向场景文件。
-4. 专项文件写完自己的增量要求，不要求读者沿链接返回上层。
-5. `docs/conventions.md` 只是历史兼容入口，不属于新阅读树。
+- 通用原则：`third-party/bbt-agent-toolkit/standards/general/principles.md`
+- 审美与代码品味：`third-party/bbt-agent-toolkit/standards/general/code-taste.md`
+- 注释内容：`third-party/bbt-agent-toolkit/standards/general/documentation.md`
+- C++ 通用写法：`third-party/bbt-agent-toolkit/standards/cpp/style.md`
+- C++ Doxygen 通用写法：`third-party/bbt-agent-toolkit/standards/cpp/documentation.md`
+- C++ 格式：`third-party/bbt-agent-toolkit/standards/cpp/format.md`
+- 角色方法（architect/engineer/qa/reviewer）与多智能体工作流：`third-party/bbt-agent-toolkit/agents/`
 
-因此不会出现“原则要求读场景、场景又要求回读原则、专项再要求读回场景”的环。链接图按路径排列后只能向更深层走。
+### 家族特有 → docs/
+
+- C++ 命名与类型、头文件与类布局、协程语法糖、注释与 Doxygen 排版、构建与测试：`docs/cpp/`
+- 语义复杂度设计与示例配置：`tools/complexity/docs/`
+
+### 工具 → tools/
+
+- 复杂度打分器：`tools/complexity/`
+- 本地 Git hooks：`tools/git-hooks/`
 
 ## 开工与测试前的核对
 
@@ -41,35 +45,17 @@ README.md                         根路由，只负责选择路径
 
 ## 选择一条阅读路径
 
-第一步通常读 [共用原则](docs/00-principles/README.md)，第二步只选一个当前职责：
+第一步读本根路由，再按当前职责进入：
 
 | 当前任务 | 入口 | 需要时再展开 |
 |---|---|---|
-| 设计 API、模块边界、失败与关闭语义 | [设计职责](docs/10-design/README.md) | 复杂度指标与告警口径按设计入口展开；若形成独立决策，另记稳定 ADR |
-| 编写或修改实现 | [编码职责](docs/20-coding/README.md) | [C++](docs/20-coding/cpp.md)、[文档与注释](docs/20-coding/documentation.md) |
-| 评审代码、设计或文档 | [Review 职责](docs/30-review/README.md) | [生命周期与扩展](docs/30-review/lifecycle.md) |
-| 设计、精简行为与回归用例 | [用例设计](docs/40-testcase/README.md) | [并发与生命周期](docs/40-testcase/concurrency.md)、[按阶段运行](docs/40-testcase/execution.md) |
-| 长程任务拆给多个智能体：好与坏的工作流、工作包粒度 | [长程任务工作流](docs/50-workflow/README.md) | 无专项文件；调度器、模型与命令不在本层 |
+| 设计 API、模块边界、失败与关闭语义 | 工具 `agents/architect/`（toolkit） | 语义复杂度指标与告警口径：`tools/complexity/docs/semantic-complexity.md` |
+| 编写或修改实现 | `docs/cpp/`（家族特有 C++） + 工具 `agents/engineer/`（toolkit） | C++ 通用写法 `standards/cpp/style.md` |
+| 评审代码、设计或文档 | 工具 `agents/reviewer/`（toolkit） | 生命周期与扩展专项同 `agents/reviewer/` |
+| 设计、精简行为与回归用例 | 工具 `agents/qa/`（toolkit） | 并发与生命周期、按阶段运行同 `agents/qa/` |
+| 长程任务拆给多个智能体 | 工具 `agents/workflow.md`（toolkit） | 无专项文件；调度器、模型与命令不在本层 |
 
-“需要时”由场景入口中的触发条件决定，不按仓库里出现了某个目录就全量加载。例如：
-
-- 改一个普通 C++ 值类型：原则 → 编码 → C++；不读生命周期专项。
-- 改异步关闭和回调注销：原则 → 设计或编码 → 生命周期相关专项。
-- 做纯文档 Review：原则 → Review → 文档专项；不因为同仓有网络代码而读取并发专项。
-- 只决定开发中或合入时跑哪些测试：直接读[按阶段运行](docs/40-testcase/execution.md)，不用重新设计测试；发现覆盖缺口时才进入用例入口。
-
-## 这套规范负责什么
-
-它约束设计、编码、评审和用例设计时的判断方式，尤其关注责任闭合、外部复杂度、失败后果和可观察性。它不自动授予提交、推送、合并、修改 CI 或写入受保护文件的权限，也不把“读过文档”算成构建、测试或 Review 通过。
-
-正例：一次修改涉及一个异步回调。作者先读原则和编码入口，再按入口条件展开 C++ 规则，最后在变更说明中给出回调寿命和异常路径证据。
-
-反例：看到 `review-lifecycle` 文件名就要求所有人全量阅读，或读完规则后把“应该安全”写成“已经测试通过”。前者增加无关理解成本，后者把规范意图冒充成执行证据。
-
-## 本地工程工具
-
-- [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
-- [本地 Git hooks](tools/git-hooks/README.md)：commit 机械检查、push 前核对随仓库提交的 review ticket 并现场检查格式与密钥；规则有统一的 meta 与报错协议，首错即停，支持 `--skip-rules`；仓库适配写在 `.config/bbt-git-hooks.toml`。
+“需要时”由场景入口中的触发条件决定，不按仓库里出现了某个目录就全量加载。例如：改一个普通 C++ 值类型：通用原则 → `docs/cpp/naming-and-types.md`；不读生命周期专项。
 
 ## 维护规则
 
@@ -78,9 +64,17 @@ README.md                         根路由，只负责选择路径
 - 公共正文只写稳定、可复用的判断方式；过程日志、审查报告、测试输出和私有来源留在仓外证据中。
 - 入口、文件名和命令必须实际存在；改目录后同步更新本文件中的路径，并做链接存在性和环检测。
 - 规范可以精练，但删掉会改变行为判断的约束时，要在新正文或迁移说明中交代去向。
-- 每次遇到新的 badcase，先判断它是否改变当前用户或后来维护者必须知道的事实；需要知道就直接修正唯一真源、代码、测试、文档或提示词中的当前措辞，不把旧句子留着再追加补丁。历史原因默认留在 commit、ADR、审查报告或私有证据。
+- 每次遇到新的 badcase，先判断它是否改变当前用户或后来维护者必须知道的事实；需要知道就直接修正唯一真源、代码、测试、文档或提示词中的当前措辞，不把旧句子留着再追加补丁。历史原因默认留在 commit、ADR、审查报告或私有证据中。
 - 只有兼容性、迁移、安全或不可逆决策确实依赖历史时，稳定正文才保留最小背景；Issue 号和阶段叙事不能代替当前契约。Review 必须检查新概念后是否仍残留旧定义。
 
-做到这里的标准是：一个新读者能从根路由选到最小相关路径，能知道哪些内容不必读，能用正反例判断自己的改动是否落在规则范围内；遇到 badcase 时，能区分该修当前真相还是只保留必要历史。
+历史兼容入口 `docs/conventions.md` 已删除；不再维护第二份正文。
 
-历史兼容入口仍保留在 `docs/conventions.md`；它不再维护第二份正文。
+## 本地工程工具
+
+- [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
+- [本地 Git hooks](tools/git-hooks/README.md)：commit 机械检查、push 前核对随仓库提交的 review ticket 并现场检查格式与密钥；规则有统一的 meta 与报错协议，首错即停，支持 `--skip-rules`；仓库适配写在 `.config/bbt-git-hooks.toml`。
+
+## 门禁
+
+- 须先获用户授权：commit、push、开 PR、付费调用、破坏性操作、新依赖、CI/发布变更、删除或重命名公开的规范路径与工具入口（可能已被消费仓引用）、改变公共规则的适用范围。任务会产生改动时，开工时一次问清是否授权 commit/push/开 PR，授权覆盖整段任务；未授权则停在 commit 前，交付改动与验证结果。
+- 只改获授权范围，保留他人已有改动；远端写入后回读确认目标对象。
