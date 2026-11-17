@@ -1,6 +1,6 @@
 # C++ 规范入口（bbtools 家族特有）
 
-本目录只留 bbtools 家族在 C++ 上的特有约定；通用 C++ 规范（写法、文档、格式）位于 `third-party/bbt-agent-toolkit/standards/cpp/`（submodule，由协调者稍后添加，链接暂时无法解析属预期）。
+本目录只留 bbtools 家族在 C++ 上的特有约定；通用 C++ 规范（写法、文档、格式）位于 `third-party/bbt-agent-toolkit/standards/cpp/`（submodule，已固定到 toolkit `main` 已合入的提交）。
 
 ## 阅读路径
 
