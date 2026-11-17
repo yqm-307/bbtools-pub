@@ -1,0 +1,9 @@
+id = "T301"
+interface = "cpp"
+kind = "auto"
+title = "超大文件职责候选"
+fix = "人工核对候选，不自动删除或改名"
+docs = "tools/lint/README.md"
+default_enabled = true
+[options]
+file_lines = 1000

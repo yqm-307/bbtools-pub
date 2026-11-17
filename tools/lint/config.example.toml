@@ -1,0 +1,47 @@
+# 消费仓只保留一份 .config/lint.toml；本例的公开符号/路径排除属于 bbtools 策略。
+schema_version = 2
+timeout_seconds = 60
+
+[scan]
+rules = ["T101", "T102", "T201", "T301", "T302", "T303", "T304", "T401", "T501", "T601"]
+
+# T 规则只放 scan：hook 中遇到条件编译（#if/#ifdef）或复杂宏会判为解析不完整并 exit 2，warn 不能降级。
+[commit]
+rules = ["whitespace", "format", "comment-form", "template-layout"]
+
+[push]
+rules = ["review-ticket", "llm-review", "format", "secrets"]
+
+[scope]
+exclude = ["tests/*", "*/tests/*", "proto/*", "*/proto/*", "*.pb.h", "*.pb.cc"]
+
+[format]
+binary = "clang-format"
+
+[rules.T101]
+level = "warn"
+options = { fields = 10 }
+
+[rules.T201]
+level = "warn"
+options = { short_comment_chars = 48 }
+
+# T202 默认关闭；需要人工复核时将 ID 加入 scan.rules，不建议自动删除注释。
+[rules.T202]
+level = "warn"
+options = { short_comment_chars = 48 }
+
+[rules.T301]
+options = { file_lines = 1000 }
+
+[rules.T401]
+options = { forwarders = 2 }
+
+[rules.T501]
+level = "warn"
+
+[[exclude]]
+rule = "T501"
+path = "*"
+symbol = "kRpcV2*"
+reason = "bbtools RPC 公开常量属于兼容契约，不是内部迁移名"

@@ -1,0 +1,6 @@
+id = "review-ticket"
+interface = "git-push"
+kind = "auto"
+title = "缺少合格的 review ticket"
+fix = "对 BASE..HEAD 做完审查后，运行 python3 -I <pub>/tools/lint/rules/review-ticket/new.py --base <BASE> 生成骨架，填写后单独提交为紧随代码 commit 的 commit（只含 .config/review-tickets/）"
+docs = "tools/lint/rules/review-ticket/README.md"

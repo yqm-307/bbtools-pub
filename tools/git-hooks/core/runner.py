@@ -13,6 +13,11 @@ import sys
 import tomllib
 
 HOME = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(HOME.parent / 'lint/core'))
+import registry
+from configuration import CONFIG as LINT_CONFIG, load_config, validate
+
+META_KEYS = registry.META_KEYS
 CONFIG = '.config/bbt-git-hooks.toml'
 DEFAULTS = {
     'schema_version': 1,
@@ -24,8 +29,7 @@ DEFAULTS = {
 }
 
 
-FOLDERS = {'commit': 'stages/commit', 'push': 'stages/push'}
-META_KEYS = {'id', 'stage', 'kind', 'title', 'fix', 'docs'}
+RULES = HOME.parent / 'lint/rules'
 # auto: the hook runs the check itself at this stage; attested: the hook only verifies submitted evidence.
 KINDS = ('auto', 'attested')
 REPORT_CODE = re.compile(r'E-[A-Z0-9]+(-[A-Z0-9]+)*')
@@ -54,6 +58,13 @@ def config():
     root = Path(git('rev-parse', '--show-toplevel').stdout.strip())
     result = copy.deepcopy(DEFAULTS)
     path = root / CONFIG
+    unified = root / LINT_CONFIG
+    if unified.exists() and path.exists():
+        raise HookError(f'keep one configuration: {LINT_CONFIG} or {CONFIG}, not both')
+    if unified.exists() or (path.exists() and tomllib.loads(path.read_text()).get('schema_version') == 2):
+        result = load_config(unified if unified.exists() else path)
+        os.chdir(root)
+        return result
     if path.exists():
         def merge(dst, src):
             for key, value in src.items():
@@ -75,21 +86,14 @@ def config():
     if any(not isinstance(p, str) for p in result['scope']['exclude']):
         raise HookError('scope.exclude must contain strings')
     os.chdir(root)
-    return result
+    result['schema_version'] = 2
+    return validate(result)
 
 
 def load_meta(stage, rule):
-    path = HOME / FOLDERS[stage] / 'rules' / rule / 'meta.toml'
-    if not path.is_file():
-        raise HookError(f'{rule}: missing meta.toml ({path}); copy stages/_template/ to start a rule')
-    meta = tomllib.loads(path.read_text())
-    if set(meta) != META_KEYS:
-        raise HookError(f'{rule}: meta.toml keys must be exactly {sorted(META_KEYS)}, '
-                        f'missing {sorted(META_KEYS - set(meta))}, unknown {sorted(set(meta) - META_KEYS)}')
-    if any(not isinstance(v, str) or not v.strip() for v in meta.values()):
-        raise HookError(f'{rule}: every meta.toml value must be a nonempty string')
-    if meta['id'] != rule or meta['stage'] != stage or meta['kind'] not in KINDS:
-        raise HookError(f'{rule}: meta.toml id/stage/kind must be {rule}/{stage}/one of {KINDS}')
+    meta = registry.load_meta(rule)
+    if meta['interface'] == 'git-push' and stage != 'push':
+        raise HookError(f'{rule}: requires push context')
     return meta
 
 
@@ -143,7 +147,6 @@ def message_skips(path):
 
 
 def execute(stage, cfg, skipped, context):
-    folder = HOME / FOLDERS[stage]
     rules = cfg[stage]['rules']
     passed, skip_list = [], []
     for i, rule in enumerate(rules):
@@ -151,12 +154,16 @@ def execute(stage, cfg, skipped, context):
             print(f'SKIP {rule}', file=sys.stderr)
             skip_list.append(rule)
             continue
-        script = folder / 'rules' / rule / 'main.py'
+        script = RULES / rule / 'main.py'
         if not script.is_file():
             raise HookError(f'{rule}: missing script {script}')
         meta = load_meta(stage, rule)
+        command = [sys.executable, '-I', str(script)]
+        if meta['interface'] == 'cpp':
+            command = [sys.executable, '-I', str(HOME.parent / 'lint/core/hook.py'), rule]
+        warning = False
         # Kill the rule process group on timeout, including formatter children.
-        with subprocess.Popen([sys.executable, '-I', str(script)], stdin=subprocess.PIPE,
+        with subprocess.Popen(command, stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE, text=True, start_new_session=True) as p:
             try:
                 out, _ = p.communicate(json.dumps(context), timeout=cfg['timeout_seconds'])
@@ -167,13 +174,19 @@ def execute(stage, cfg, skipped, context):
             if p.returncode == 1:
                 rep = parse_report(rule, out)
                 pending = [r for r in rules[i + 1:] if r not in skipped]
-                print(render(rule, meta, rep, passed, skip_list, pending), file=sys.stderr)
-                return 1
-            if p.returncode:
+                if cfg['rules'].get(rule, {}).get('level', 'block') != 'warn':
+                    print(render(rule, meta, rep, passed, skip_list, pending), file=sys.stderr)
+                    return 1
+                warning = True
+                print(f'WARN {rule}  [{rep["code"]}]  {meta["title"]}', file=sys.stderr)
+                for problem in rep['problems']:
+                    print(f'  问题：{problem}', file=sys.stderr)
+            if p.returncode not in (0, 1):
                 print(f'ERROR {rule}: remaining rules not run', file=sys.stderr)
                 return 2
-        print(f'PASS {rule}', file=sys.stderr)
-        passed.append(rule)
+        if not warning:
+            print(f'PASS {rule}', file=sys.stderr)
+            passed.append(rule)
     return 0
 
 

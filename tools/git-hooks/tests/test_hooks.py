@@ -18,8 +18,9 @@ class HooksTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.repo = self.root / 'repo'
         self.repo.mkdir()
-        self.tools = self.root / 'tools'
+        self.tools = self.root / 'tools/git-hooks'
         shutil.copytree(SOURCE, self.tools, ignore=shutil.ignore_patterns('__pycache__', 'tests'))
+        shutil.copytree(SOURCE.parent / 'lint', self.tools.parent / 'lint', ignore=shutil.ignore_patterns('__pycache__'))
         self.env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
         for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'):
             self.env.pop(key, None)
@@ -64,7 +65,7 @@ class HooksTest(unittest.TestCase):
         return self.git('rev-parse', 'HEAD').stdout.strip()
 
     def new_ticket(self, sha, base=None, ok=True):
-        return self.run_cmd(sys.executable, '-I', str(self.tools / 'stages/push/rules/review-ticket/new.py'),
+        return self.run_cmd(sys.executable, '-I', str(self.tools.parent / 'lint/rules/review-ticket/new.py'),
                             '--commit', sha, '--base', base or self.base, ok=ok)
 
     def ticket_file(self, sha):
@@ -137,9 +138,9 @@ class HooksTest(unittest.TestCase):
         self.assertNotEqual(self.commit(ok=False).returncode, 0)
 
     def probe_meta(self, **override):
-        meta = dict(id='probe', stage='commit', kind='auto', title='probe title', fix='probe fix', docs='docs/x.md')
+        meta = dict(id='probe', interface='git-change', kind='auto', title='probe title', fix='probe fix', docs='docs/x.md')
         meta.update(override)
-        (self.tools / 'stages/commit/rules/probe/meta.toml').write_text(
+        (self.tools.parent / 'lint/rules/probe/meta.toml').write_text(
             ''.join(f'{k} = "{v}"\n' for k, v in meta.items()))
 
     def test_missing_crashing_timeout_rule_stops(self):
@@ -148,7 +149,7 @@ class HooksTest(unittest.TestCase):
         self.setting('[commit]\nrules=["probe","format"]\n')
         p = self.commit(ok=False)
         self.assertIn('missing script', p.stderr)
-        rule = self.tools / 'stages/commit/rules/probe/main.py'
+        rule = self.tools.parent / 'lint/rules/probe/main.py'
         rule.parent.mkdir(parents=True)
         rule.write_text('raise RuntimeError("injected")\n')
         p = self.commit(ok=False)
@@ -168,7 +169,7 @@ class HooksTest(unittest.TestCase):
         self.put('seed.txt', 'changed\n')
         self.git('add', 'seed.txt')
         self.setting('[commit]\nrules=["whitespace","probe","format"]\n')
-        rule = self.tools / 'stages/commit/rules/probe/main.py'
+        rule = self.tools.parent / 'lint/rules/probe/main.py'
         rule.parent.mkdir(parents=True)
         rule.write_text('import json,sys\nprint(json.dumps({"code":"E-PROBE","problems":["a.cc:3: bad"]}))\nsys.exit(1)\n')
         self.probe_meta()
@@ -181,7 +182,7 @@ class HooksTest(unittest.TestCase):
         for bad in (dict(kind='sync'), dict(stage='push'), dict(id='other'), dict(fix=' ')):
             self.probe_meta(**bad)
             self.assertIn('probe:', self.commit(ok=False).stderr, bad)
-        meta = self.tools / 'stages/commit/rules/probe/meta.toml'
+        meta = self.tools.parent / 'lint/rules/probe/meta.toml'
         meta.write_text(meta.read_text() + 'extra = "x"\n')
         self.assertIn('unknown', self.commit(ok=False).stderr)
 
@@ -192,15 +193,14 @@ class HooksTest(unittest.TestCase):
         finally:
             sys.path.remove(str(SOURCE / 'core'))
         count = 0
-        for stage, folder in runner.FOLDERS.items():
-            for rule in (SOURCE / folder / 'rules').iterdir():
-                if rule.is_dir():
-                    meta = runner.load_meta(stage, rule.name)
-                    self.assertTrue((SOURCE.parents[1] / meta['docs']).is_file(), meta['docs'])
-                    count += 1
-        self.assertEqual(count, 8)
+        for rule in runner.RULES.iterdir():
+            if rule.is_dir() and not rule.name.startswith('_'):
+                meta = runner.load_meta('push', rule.name)
+                self.assertTrue((SOURCE.parents[1] / meta['docs']).is_file(), meta['docs'])
+                count += 1
+        self.assertEqual(count, 19)
         runner.HOME = SOURCE  # the template must itself be a loadable skeleton
-        template = runner.tomllib.loads((SOURCE / 'stages/_template/meta.toml').read_text())
+        template = runner.tomllib.loads((SOURCE.parent / 'lint/rules/_template/meta.toml').read_text())
         self.assertEqual(set(template), runner.META_KEYS)
 
     def test_ticket_flow_missing_pending_pass(self):

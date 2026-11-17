@@ -1,0 +1,6 @@
+id = "example"
+interface = "cpp"
+kind = "auto"
+title = "示例 C++ 规则"
+fix = "人工核对报告中的候选"
+docs = "tools/lint/README.md"

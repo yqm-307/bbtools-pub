@@ -1,0 +1,8 @@
+id = "T000"
+interface = "cpp"
+kind = "auto"
+title = "解析覆盖诊断"
+fix = "人工核对候选，不自动删除或改名"
+docs = "tools/lint/README.md"
+default_enabled = true
+[options]
