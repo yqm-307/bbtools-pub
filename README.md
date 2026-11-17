@@ -1,6 +1,6 @@
 # bbtools 共用开发规范（根路由）
 
-这份仓库把 bbtools 家族特有的开发规范与本地工程工具聚在一起；通用语言规范与角色方法已迁出，消费仓通过 `third-party/bbt-agent-toolkit/`（submodule，由协调者稍后添加，链接暂时无法解析属预期）引用。
+这份仓库把 bbtools 家族特有的开发规范与本地工程工具聚在一起；通用语言规范与角色方法已迁出，消费仓经本仓根路由进入 `third-party/bbt-agent-toolkit/`（submodule，已固定到 toolkit `main` 已合入的提交）。
 
 ## 先看引用方向
 
@@ -9,6 +9,7 @@
 1. 根 `README.md` 指向本仓家族特有规范与工具入口；通用部分指向 `third-party/bbt-agent-toolkit/standards/` 与 `third-party/bbt-agent-toolkit/agents/`。
 2. 本仓入口只指向自己目录中的文件。
 3. 同一规则只留一个完整正文，其他地方用短句说明适用层级，不复制整段。
+4. 下游仓引用上游时指向上游根路由（消费仓引 `third-party/bbtools-pub/README.md`），不固定上游内部的职责目录；上游内部路径变动只改上游根路由。例外：上游声明为稳定入口的路径（如 `tools/`、`docs/cpp/`）可直接引用。
 
 ### 通用 → toolkit
 
