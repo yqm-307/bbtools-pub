@@ -1,0 +1,6 @@
+id = "third-party-layout"
+interface = "git-change"
+kind = "auto"
+title = "第三方目录被非 gitlink 改动"
+fix = "第三方依赖只以 gitlink 引入：把该精确路径登记到 layout.allowed_gitlinks，或从提交中移除；不要把第三方源码直接提交进仓"
+docs = "tools/lint/README.md"

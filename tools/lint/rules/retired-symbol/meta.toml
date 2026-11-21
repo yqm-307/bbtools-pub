@@ -1,0 +1,6 @@
+id = "retired-symbol"
+interface = "git-change"
+kind = "auto"
+title = "新增代码使用已退役的标识符"
+fix = "按本仓迁移契约替换指定私有名字"
+docs = "tools/lint/README.md"

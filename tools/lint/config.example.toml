@@ -1,16 +1,32 @@
 # 消费仓只保留一份 .config/lint.toml；本例的公开符号/路径排除属于 bbtools 策略。
 schema_version = 2
 timeout_seconds = 60
+enforce_blocks = true
 
 [scan]
 rules = ["T101", "T102", "T201", "T301", "T302", "T303", "T304", "T401", "T501", "T601"]
 
 # T 规则只放 scan：hook 中遇到条件编译（#if/#ifdef）或复杂宏会判为解析不完整并 exit 2，warn 不能降级。
 [commit]
-rules = ["whitespace", "format", "comment-form", "template-layout"]
+rules = ["whitespace", "format", "comment-form", "template-layout", "retired-symbol", "header-implementation"]
 
 [push]
-rules = ["review-ticket", "llm-review", "format", "secrets"]
+rules = ["whitespace", "format", "comment-form", "template-layout", "retired-symbol", "header-implementation", "review-ticket", "llm-review", "secrets"]
+
+# 只列本模块已经明确退役的名字。精确作用域可覆盖 scope 中的测试排除。
+[[retired]]
+path = "bbt/infra/rpc/*"
+symbols = ["ServerV2LedgerForTest"]
+
+[[retired]]
+path = "tests/*"
+symbols = ["ServerV2LedgerForTest"]
+
+# 目录布局规则默认关闭：不把 new-root / third-party-layout 列入 commit.rules 或 push.rules 时，本表完全不参与检查。
+# 启用时两个名单都不能为空，且只接受精确路径（不用 glob）；示例值是占位，按本仓实际目录填写。
+# [layout]
+# allowed_roots = ["tooling", "third-party"]
+# allowed_gitlinks = ["third-party/example-dep"]
 
 [scope]
 exclude = ["tests/*", "*/tests/*", "proto/*", "*/proto/*", "*.pb.h", "*.pb.cc"]

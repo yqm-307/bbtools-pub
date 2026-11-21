@@ -13,11 +13,12 @@ def contexts(ctx):
         yield {'config': ctx['config'], 'base': info['base'], 'tree': info['tip']}
 
 
-def files(ctx, kinds='ACMR'):
+def files(ctx, kinds='ACMR', *, excluded=None):
     names = git('diff', '--name-only', '-z', '--no-renames', f'--diff-filter={kinds}',
                 ctx['base'], ctx['tree'], '--').stdout.split('\0')
-    return [p for p in names if p and not any(fnmatch.fnmatchcase(p, pattern)
-            for pattern in ctx['config']['scope']['exclude'])]
+    if excluded is None:
+        excluded = ctx['config']['scope']['exclude']
+    return [p for p in names if p and not any(fnmatch.fnmatchcase(p, pattern) for pattern in excluded)]
 
 
 def cxx_files(ctx):
@@ -29,8 +30,8 @@ def text(ctx, path):
 
 
 def added_lines(ctx, path):
-    diff = git('diff', '-U0', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames',
-               ctx['base'], ctx['tree'], '--', path).stdout
+    diff = git('diff', '-U0', '--inter-hunk-context=0', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames',
+               ctx['base'], ctx['tree'], '--', ':(literal)' + path).stdout
     lines = set()
     for m in re.finditer(r'^@@ -\S+ \+(\d+)(?:,(\d+))? @@', diff, re.M):
         start, count = int(m[1]), int(m[2] or 1)

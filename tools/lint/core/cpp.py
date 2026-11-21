@@ -8,7 +8,7 @@ import scanner
 EXTENSIONS = {'.h', '.hh', '.hpp', '.hxx', '.cc', '.cpp', '.cxx', '.c'}
 HEADERS = {'.h', '.hh', '.hpp', '.hxx'}
 LEXEMES = re.compile(
-    r'//[^\n]*|/\*[\s\S]*?\*/|(?:u8|u|U|L)?R"(?P<delim>[^()\\\s]{0,16})\([\s\S]*?\)(?P=delim)"'
+    r'//(?:\\\n|[^\n])*|/\*[\s\S]*?\*/|(?:u8|u|U|L)?R"(?P<delim>[^()\\\s]{0,16})\([\s\S]*?\)(?P=delim)"'
     r'|\b\d[\w.\x27]*|(?:u8|u|U|L)?"(?:\\[\s\S]|[^"\\])*"'
     r"|'(?:\\[\s\S]|[^'\\])+'")
 CLASSES = re.compile(r'\b(class|struct)\s+(\w+)\s*(?:final\s*)?(?::[^;{}]+)?\s*\{')
