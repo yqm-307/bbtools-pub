@@ -20,7 +20,8 @@ def validate(data):
     cfg = {'schema_version': 2, 'timeout_seconds': 60, 'scan': {'rules': defaults()},
            'commit': {'rules': []}, 'push': {'rules': []}, 'scope': {'exclude': []},
            'format': {'binary': 'clang-format'}, 'rules': {}, 'exclude': [],
-           'retired': [], 'enforce_blocks': False}
+           'retired': [], 'enforce_blocks': False,
+           'layout': {'allowed_roots': [], 'allowed_gitlinks': []}}
     if set(data) - set(cfg):
         raise ValueError(f'unknown config keys: {sorted(set(data) - set(cfg))}')
     cfg.update(copy.deepcopy(data))
@@ -35,6 +36,19 @@ def validate(data):
         names = string_list(item['symbols'], 'retired.symbols')
         if not names or any(not re.fullmatch(r'[A-Za-z_]\w*', n, re.ASCII) for n in names):
             raise ValueError('retired.symbols requires exact C++ identifiers')
+    layout = cfg['layout']
+    if not isinstance(layout, dict) or set(layout) - {'allowed_roots', 'allowed_gitlinks'}:
+        raise ValueError('layout: expected allowed_roots/allowed_gitlinks arrays only')
+    cfg['layout'] = {'allowed_roots': string_list(layout.get('allowed_roots', []), 'layout.allowed_roots'),
+                     'allowed_gitlinks': string_list(layout.get('allowed_gitlinks', []), 'layout.allowed_gitlinks')}
+    if any('/' in root or root in ('.', '..') for root in cfg['layout']['allowed_roots']):
+        raise ValueError('layout.allowed_roots must be exact top-level directory names')
+    for path in cfg['layout']['allowed_gitlinks']:
+        parts = path.split('/')
+        if any(not part or part in ('.', '..') for part in parts):
+            raise ValueError('layout.allowed_gitlinks must be exact repo-relative paths')
+        if parts[0] != 'third-party':
+            raise ValueError('layout.allowed_gitlinks must name third-party or a path inside it')
     if type(cfg['schema_version']) is not int or cfg['schema_version'] != 2:
         raise ValueError('schema_version must be 2')
     if type(cfg['timeout_seconds']) is not int or cfg['timeout_seconds'] <= 0:
@@ -48,6 +62,10 @@ def validate(data):
             raise ValueError(f'{mode}: duplicate or invalid rule ID')
         if 'retired-symbol' in names and not cfg['retired']:
             raise ValueError('retired-symbol requires at least one [[retired]] entry')
+        if 'new-root' in names and not cfg['layout']['allowed_roots']:
+            raise ValueError('new-root requires a nonempty layout.allowed_roots list')
+        if 'third-party-layout' in names and not cfg['layout']['allowed_gitlinks']:
+            raise ValueError('third-party-layout requires a nonempty layout.allowed_gitlinks list')
     if not isinstance(cfg['scope'], dict) or set(cfg['scope']) != {'exclude'}:
         raise ValueError('scope: expected exclude array only')
     string_list(cfg['scope']['exclude'], 'scope.exclude')

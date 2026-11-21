@@ -1,0 +1,6 @@
+id = "new-root"
+interface = "git-change"
+kind = "auto"
+title = "改动新增了未登记的顶层目录"
+fix = "把目录移进已有顶层目录，或按本仓目录约定把它的精确名称加入 layout.allowed_roots（不用 glob）"
+docs = "tools/lint/README.md"

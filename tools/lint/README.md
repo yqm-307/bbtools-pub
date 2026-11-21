@@ -19,7 +19,8 @@ lint/
 │   ├── cpp.py              C++ 词法模型、直接成员与作用域线索
 │   ├── scanner.py          唯一的注释词法扫描与形态检查实现
 │   ├── scan.py             共用扫描、抑制、覆盖诊断与报告
-│   └── hook.py             index/推送对象到源文件检查的适配
+│   ├── hook.py             index/推送对象到源文件检查的适配
+│   └── layout.py           Git tree 的顶层目录与 gitlink 模式
 └── rules/
     ├── _template/          新 C++ 规则模板
     └── <id>/               meta.toml + main.py（可含规则私有辅助脚本）
@@ -48,6 +49,7 @@ hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用
 | `[rules.<id>].level` | `block`（默认）或 `warn`，只影响 hook 违规，不改变全量告警模式 |
 | `[rules.<id>].options` | 覆盖规则 meta 中的正整数阈值；未知阈值拒绝 |
 | `[scope].exclude` | 路径 glob 数组，缩小源码检查范围；既有 whitespace/secrets 保留原范围 |
+| `[layout]` | `allowed_roots` / `allowed_gitlinks` 为精确路径数组，只被 new-root 和 third-party-layout 读取；默认空，启用对应规则时不可为空 |
 | `[[exclude]]` | `rule/path/symbol/reason` 四个非空字符串，按符号抑制 C++ 候选；T000 不可抑制 |
 | `[format].binary` | clang-format 可执行文件路径；不自动安装，不修改消费仓格式配置 |
 
@@ -65,10 +67,29 @@ hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用
 - **告警**。header-implementation 在改动涉及的接口头函数上报告能识别的模板体，以及带分支、循环、加锁、分配等线索的普通函数体。输出位置和目标文件建议。该规则只允许 `warn`，普通 getter、需要调用处可见的 constexpr 定义和 `__T` 实现头可保留。词法匹配仅为人工挑选候选，复杂语法可能漏报。
 - **运行边界**。提交看暂存对象，推送看各目标树相对基线的净变更。工具和配置错误保持退出码 2。规则集读取本地工作区配置，Git 的 `--no-verify` 仍可绕过客户端。托管端强制合入需要独立的 required check。
 
+### 目录布局规则（默认关闭）
+
+new-root 和 third-party-layout 比较 base 与目标 tree 的目录形态，不读工作区，也不内置任何仓名、顶层目录或 gitlink 白名单：允许项全部来自配置。两者都是 `git-change` 规则，只能加入 `commit.rules` 或 `push.rules`，加入 `scan.rules` 按非 C++ 规则返回 2。
+
+- **new-root**。顶层目录取每个非顶层文件路径的首段，以及顶层 gitlink 本身；目标 tree 相对 base 新增、且不在 `layout.allowed_roots` 中的顶层目录各报一条。已有目录内的新增、修改、删除不报，因此首次创建约定目录由配置放行，日常在存量目录里加减文件不受影响。
+- **third-party-layout**。本次改动涉及 `third-party` 本身或 `third-party/` 下的路径时，只有「路径在 `layout.allowed_gitlinks` 中、且目标 tree 里该路径是 gitlink（160000）」才放行；新增普通文件、放进未登记的 gitlink、把 gitlink 换成普通目录都会报到该路径。删除不在检查范围：消失的路径不再出现在目标 tree 里。
+- **配置校验**。启用某条规则但 `[layout]` 对应名单缺失或为空时按配置错误处理（退出码 2），不会静默通过；名单只接受精确路径，`allowed_roots` 必须是不含 `/` 的顶层名，`allowed_gitlinks` 必须指向 `third-party` 或它内部的路径。
+
+```toml
+[commit]
+rules = ["whitespace", "format", "comment-form", "template-layout", "new-root", "third-party-layout"]
+
+[layout]
+allowed_roots = ["tooling", "third-party"]
+allowed_gitlinks = ["third-party/example-dep"]
+```
+
+不启用时无需写 `[layout]`：schema 1 的旧配置和没列这两个 ID 的 schema 2 配置行为不变，默认 `allowed_roots`、`allowed_gitlinks` 都是空数组，只有启用对应规则才要求非空。
+
 每个目录的 `meta.toml` 必填字符串：`id`（等于目录名）、`interface`、`kind`、`title`、`fix`、`docs`（仓库内规范路径）。ID 匹配 `[A-Za-z][A-Za-z0-9-]*`。可选：布尔 `default_enabled`（默认 false）、`[options]` 正整数默认阈值。缺项、多余键、非法值均拒绝。
 
 - `interface = "cpp"`：`main.py` 导出 `check(source, options)`，返回或 yield `(行号, 消息, 符号)`；行号从 1 开始，无符号用空字符串。两种入口调用同一函数。`source` 提供 `path/text/code/pairs/classes/line(offset)/top_classes()/variable_comments()/in_body(offset)/exists(path)`；`code` 已屏蔽字符串、注释和预处理行。不可变源码、词法信息与目录存在性由 core 提供，不要自行重读工作区文件。
-- `interface = "git-change"`：兼容既有空白、格式、注释形态和模板路径检查，stdin JSON 提供 `config/base/tree` 或 push `updates`；通过 `staged.contexts()` 取得改动范围。
+- `interface = "git-change"`：兼容既有空白、格式、注释形态、模板路径和目录布局检查，stdin JSON 提供 `config/base/tree` 或 push `updates`；通过 `staged.contexts()` 取得改动范围。
 - `interface = "git-push"`：ticket、审查证据、密钥等既有推送检查，需要推送上下文，不伪造全量源码扫描的证据。Git 专用规则不加入 `scan.rules`；加入会返回 2。
 - `kind = "auto"` 表示现场检查，`attested` 表示只核对提交的证据，不执行实际审查。
 

@@ -22,6 +22,12 @@ symbols = ["ServerV2LedgerForTest"]
 path = "tests/*"
 symbols = ["ServerV2LedgerForTest"]
 
+# 目录布局规则默认关闭：不把 new-root / third-party-layout 列入 commit.rules 或 push.rules 时，本表完全不参与检查。
+# 启用时两个名单都不能为空，且只接受精确路径（不用 glob）；示例值是占位，按本仓实际目录填写。
+# [layout]
+# allowed_roots = ["tooling", "third-party"]
+# allowed_gitlinks = ["third-party/example-dep"]
+
 [scope]
 exclude = ["tests/*", "*/tests/*", "proto/*", "*/proto/*", "*.pb.h", "*.pb.cc"]
 
