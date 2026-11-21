@@ -226,6 +226,10 @@ def entry(stage):
     if stage == 'commit' and args.message_file:
         values += message_skips(args.message_file)
     skipped = skip_rules(values, cfg[stage]['rules'])
+    if cfg['enforce_blocks']:
+        mandatory = sorted(r for r in skipped if cfg['rules'].get(r, {}).get('level') != 'warn')
+        if mandatory:
+            raise HookError(f'mandatory rules cannot be skipped: {", ".join(mandatory)}')
     context = snapshot(cfg) if stage == 'commit' else {
         'config': cfg, 'updates': push_updates(sys.stdin.read()), 'remote': args.remote}
     return execute(stage, cfg, skipped, context)

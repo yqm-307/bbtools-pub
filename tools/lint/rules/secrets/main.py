@@ -29,7 +29,8 @@ def suspicious(line):
 
 
 def added(base, tip):
-    diff = git('diff', '-U0', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', base, tip, '--').stdout
+    diff = git('diff', '-U0', '--inter-hunk-context=0', '--no-ext-diff', '--no-textconv',
+               '--no-color', '--no-renames', base, tip, '--').stdout
     path = line_no = None
     for line in diff.splitlines():
         if line.startswith('+++ '):

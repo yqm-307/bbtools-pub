@@ -54,7 +54,10 @@ def plan(ctx, update):
         lines = git(*args).stdout.split()
         commits = [x for x in lines if not x.startswith('-')]
         bounds = [x[1:] for x in lines if x.startswith('-')]
-        base = bounds[0] if bounds else empty_tree()
+        if commits:
+            base = bounds[0] if bounds else empty_tree()
+        else:
+            base = tip
     code = next((c for c in commits
                  if any(not n.startswith(TICKETS) for n in changed_paths(c))), None)
     return {'tip': tip, 'base': base, 'code': code, 'ref': update['remote_ref']}

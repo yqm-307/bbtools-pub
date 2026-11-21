@@ -1,0 +1,6 @@
+id = "header-implementation"
+interface = "git-change"
+kind = "auto"
+title = "接口头中存在待拆分的函数体"
+fix = "模板实现移至同目录 __TXxx.hpp，普通实现移至 .cc；评估可见性与 header-only 例外"
+docs = "docs/cpp/class-and-headers.md"

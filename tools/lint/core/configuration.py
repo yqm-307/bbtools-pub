@@ -1,5 +1,6 @@
 """Shared schema for scanning and hooks; repository names belong in adapters/configs."""
 import copy
+import re
 from pathlib import Path
 import tomllib
 from registry import ID, defaults, load_meta
@@ -18,10 +19,22 @@ def validate(data):
         raise ValueError('config must be a table')
     cfg = {'schema_version': 2, 'timeout_seconds': 60, 'scan': {'rules': defaults()},
            'commit': {'rules': []}, 'push': {'rules': []}, 'scope': {'exclude': []},
-           'format': {'binary': 'clang-format'}, 'rules': {}, 'exclude': []}
+           'format': {'binary': 'clang-format'}, 'rules': {}, 'exclude': [],
+           'retired': [], 'enforce_blocks': False}
     if set(data) - set(cfg):
         raise ValueError(f'unknown config keys: {sorted(set(data) - set(cfg))}')
     cfg.update(copy.deepcopy(data))
+    if type(cfg['enforce_blocks']) is not bool:
+        raise ValueError('enforce_blocks must be boolean')
+    if not isinstance(cfg['retired'], list):
+        raise ValueError('retired must be an array of tables')
+    for item in cfg['retired']:
+        if (not isinstance(item, dict) or set(item) != {'path', 'symbols'}
+                or not isinstance(item['path'], str) or not item['path'].strip()):
+            raise ValueError('retired requires a path glob and symbols')
+        names = string_list(item['symbols'], 'retired.symbols')
+        if not names or any(not re.fullmatch(r'[A-Za-z_]\w*', n, re.ASCII) for n in names):
+            raise ValueError('retired.symbols requires exact C++ identifiers')
     if type(cfg['schema_version']) is not int or cfg['schema_version'] != 2:
         raise ValueError('schema_version must be 2')
     if type(cfg['timeout_seconds']) is not int or cfg['timeout_seconds'] <= 0:
@@ -33,6 +46,8 @@ def validate(data):
         names = string_list(section['rules'], mode + '.rules')
         if len(set(names)) != len(names) or any(not ID.fullmatch(n) for n in names):
             raise ValueError(f'{mode}: duplicate or invalid rule ID')
+        if 'retired-symbol' in names and not cfg['retired']:
+            raise ValueError('retired-symbol requires at least one [[retired]] entry')
     if not isinstance(cfg['scope'], dict) or set(cfg['scope']) != {'exclude'}:
         raise ValueError('scope: expected exclude array only')
     string_list(cfg['scope']['exclude'], 'scope.exclude')
@@ -41,6 +56,10 @@ def validate(data):
         raise ValueError('format: expected nonempty binary')
     if not isinstance(cfg['rules'], dict):
         raise ValueError('rules must be a table')
+    if any('header-implementation' in cfg[stage]['rules'] for stage in ('commit', 'push')):
+        settings = cfg['rules'].setdefault('header-implementation', {})
+        if not isinstance(settings, dict) or settings.setdefault('level', 'warn') != 'warn':
+            raise ValueError('header-implementation is warning-only')
     for rule, settings in cfg['rules'].items():
         meta = load_meta(rule)
         if not isinstance(settings, dict) or set(settings) - {'level', 'options'}:

@@ -198,7 +198,7 @@ class HooksTest(unittest.TestCase):
                 meta = runner.load_meta('push', rule.name)
                 self.assertTrue((SOURCE.parents[1] / meta['docs']).is_file(), meta['docs'])
                 count += 1
-        self.assertEqual(count, 19)
+        self.assertEqual(count, 21)
         runner.HOME = SOURCE  # the template must itself be a loadable skeleton
         template = runner.tomllib.loads((SOURCE.parent / 'lint/rules/_template/meta.toml').read_text())
         self.assertEqual(set(template), runner.META_KEYS)

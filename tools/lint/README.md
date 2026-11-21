@@ -41,6 +41,8 @@ hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用
 |---|---|
 | `schema_version = 2` | 新配置版本；原 schema 1 由 Git 适配层按原默认值转换 |
 | `timeout_seconds = 60` | hook 每个规则子进程超时；超时终止整个进程组 |
+| `enforce_blocks = true` | commit 和 pre-push 拒绝用 `--skip-rules` 跳过本阶段的阻断项。默认 false，兼容旧配置。 |
+| `[[retired]]` | `path` 为仓内路径 glob，`symbols` 为本作用域已经确认退役的 ASCII 标识符数组。按仓维护。 |
 | `[scan].rules` | 全量启用的 C++ 规则 ID，顺序执行；省略时从 meta 的 `default_enabled` 发现 |
 | `[commit].rules` / `[push].rules` | 各阶段启用的规则 ID 数组；不存在阶段绑定目录 |
 | `[rules.<id>].level` | `block`（默认）或 `warn`，只影响 hook 违规，不改变全量告警模式 |
@@ -54,6 +56,14 @@ hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用
 示例中的 proto/测试路径和 `kRpcV2*` 公开常量排除是 bbtools 消费策略，不在框架或规则中写死。纯值记录、配置快照不能按 `*State`、`*Options` 一概放行，应按实际职责配置例外并写理由。
 
 ## 规则协议与扩展
+
+### commit 与 pre-push 的阻断项、告警项
+
+[示例配置](config.example.toml) 在两个阶段都运行 whitespace、format、comment-form、template-layout、retired-symbol 和 header-implementation。前三项按现有范围检查。template-layout 拦截新增的旧式路径。推送额外执行 review-ticket、llm-review 和 secrets。采用前核对本仓排除路径、退役名与原有检查，迁移到单一配置并启用两个 Git 入口。
+
+- **阻断**。retired-symbol 只在 `[[retired]].path` 匹配的手写 C/C++ 文件逐行检查本次新增或改动的物理行。匹配完整标识符，跳过字符串、注释和 include 路径。显式路径独立于 `scope.exclude`，使已列入退役范围的测试接缝也能被检查。宏拼接、跨行拼写和文档迁移需要另行验收。
+- **告警**。header-implementation 在改动涉及的接口头函数上报告能识别的模板体，以及带分支、循环、加锁、分配等线索的普通函数体。输出位置和目标文件建议。该规则只允许 `warn`，普通 getter、需要调用处可见的 constexpr 定义和 `__T` 实现头可保留。词法匹配仅为人工挑选候选，复杂语法可能漏报。
+- **运行边界**。提交看暂存对象，推送看各目标树相对基线的净变更。工具和配置错误保持退出码 2。规则集读取本地工作区配置，Git 的 `--no-verify` 仍可绕过客户端。托管端强制合入需要独立的 required check。
 
 每个目录的 `meta.toml` 必填字符串：`id`（等于目录名）、`interface`、`kind`、`title`、`fix`、`docs`（仓库内规范路径）。ID 匹配 `[A-Za-z][A-Za-z0-9-]*`。可选：布尔 `default_enabled`（默认 false）、`[options]` 正整数默认阈值。缺项、多余键、非法值均拒绝。
 

@@ -119,6 +119,8 @@ def comment_violations(path: str, text: str, added: set[int]) -> list[str]:
     for cm in comments:
         if not added.intersection(range(cm.start, cm.end + 1)):
             continue
+        if re.fullmatch(r'//\s*(?:clang-format (?:off|on)(?::[^\n]*)?|NOLINT(?:NEXTLINE|BEGIN|END)?(?:\([^()]*\))?(?:\s+.*)?|SPDX-License-Identifier:\s*[\w.()+ -]+)\s*', cm.text):
+            continue
         problems = []
         before = any(c < cm.start_col for c in code_cols.get(cm.start, []))
         after = any(c > cm.end_col for c in code_cols.get(cm.end, []))
