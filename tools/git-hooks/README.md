@@ -31,7 +31,7 @@ git config --local core.hooksPath /absolute/path/to/bbtools-pub/tools/git-hooks/
 python3 -I <pub>/tools/git-hooks/stages/commit/main.py --skip-rules format,comment-form
 ```
 
-Git 自动提交时，在 commit message 独立一行写 `--skip-rules comment-form`。支持重复参数、多行、逗号或空格分隔。`all` 选中该阶段全部规则。默认允许跳过选中的规则并打印 `SKIP`。配置 `enforce_blocks = true` 后，只要选中任何阻断项，commit 或 pre-push 就会拒绝这次操作。提交消息里的指令保留在历史中。`#` 注释和 scissors 线后的内容不作为指令。不能写 `git commit --skip-rules ...`。
+Git 自动提交时，在 commit message 独立一行写 `--skip-rules comment-form`。支持重复参数、多行、逗号或空格分隔。`all` 选中该阶段全部规则。实际跳过的规则打印 `SKIP`；哪些规则可以跳过见 [lint 配置中的 `enforce_blocks`](../lint/README.md#一仓一份配置)。提交消息里的指令保留在历史中。`#` 注释和 scissors 线后的内容不作为指令。不能写 `git commit --skip-rules ...`。
 
 commit 消息不会被 push hook 读取；手动 push 入口的 `--skip-rules` 只影响该次调用。Git 的 `--no-verify` 可以绕过本地 hook，这不是服务端安全机制。
 

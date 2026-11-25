@@ -14,7 +14,7 @@
 2. 缺口确实阻塞当前工作时，提议给语法糖补一个薄封装，同步更新那份手册和对应测试；
 3. 补之前的临时直接调用，必须在调用处写明原因，并指向对应的缺口条目。
 
-语法糖的改动按公共接口对待：保持“意图 → 用法”的形式，不改变已有宏的行为，不新增只为单个调用点服务的宏。
+语法糖的改动按公共接口对待：保持“意图 → 用法”的形式。涉及异步返回类型或执行入口的语义迁移属于破坏性 API 变更，必须同步迁移声明、实现、调用方和测试。
 
 使用时的陷阱同样以那份手册为准（例如 `bbtco_yield` 自带结尾分号，不能写在无花括号的 `if ... else` 里）。写注释或文档引用宏的行为前，先核对头文件当前内容，不凭印象。
 
@@ -22,15 +22,31 @@
 
 反例：同一个仓里同一种意图一处写 `bbtco`，一处写 `g_scheduler->RegistCoroutineTask(...)`，又没有说明原因，读者无法判断两种写法是否有语义差别；或者为了避开缺口去读 Scheduler 内部再自己拼一套。
 
-## 2 检查低层调用
+## 2 用确定性机制约束异步调用
 
-在[消费仓 lint 配置](../../tools/lint/README.md#一仓一份配置)的 `scan.rules` 中显式加入 `coroutine-sugar`，即可扫描调度、挂起、同步原语工厂和 async 内部 helper 的直接使用候选。它只按源码词法匹配，不解析类型，也不自动修复；是否接入 Git hook 由消费仓决定。扫描退出 `2` 表示未完成，不是通过。
+异步语义属于 API 契约，不能只靠注释、命名或调用者自觉维持。凡是可能挂起当前协程的操作，公开返回类型必须携带异步操作标记，并且只能通过与该类型匹配的 `await` 或 `fire` 入口执行。
 
-验证底层接口的用例、协程库内部或已知语法糖缺口，可以在调用处标注例外；说明为何仍需直接调用。例如：
+- `bbt_co_await expr;` 在当前协程中执行操作并等待完成。
+- `bbt_co_fire expr;` 将操作提交给 detached 协程，不等待最终结果。
+- 普通返回值没有对应的 helper 重载，`bbt_co_await ordinary();` 必须在编译期失败。
+- 异步操作对象不提供业务可调用的执行运算符。普通调用只构造操作描述，不能绕过 `await` 或 `fire` 执行函数体。
+- `fire` 只放弃最终完成结果，不放弃提交失败和后台错误的处理责任。操作之间有顺序依赖时必须使用 `await`。
+
+实现优先使用返回类型、模板匹配、偏特化和运算符重载建立硬边界。`[[nodiscard]]`、`-Werror=unused-result` 与静态检查用于补充“操作被暂存后遗失”等 C++ 类型系统无法单独判断的路径。新增语法糖必须同步提供正例、负例和可运行的编译期断言。
+
+这个原则适用于协程库、infra adapter、framework 控制面及其他返回可能挂起操作的模块。下游 API 不得把 async 操作降级成普通返回值，也不得用注释重新解释成同步调用。
+
+## 3 用 lint 固化语法糖边界
+
+严格仓库可以在[消费仓 lint 配置](../../tools/lint/README.md#一仓一份配置)中启用 `coroutine-sugar`，把规则加入 `scan.rules`、`commit.rules` 和 `push.rules`。规则会检查直接调用 `RegistCoroutineTask`、`Hook_Sleep`、`YieldAndPushGCoQueue`、`YieldUntilFd*`、同步原语工厂、协程事件工厂及 async 内部 helper，并要求改用对应的 `bbtco_*` 或 `bbt_co_*` 入口。它只按源码词法匹配，不解析类型，也不自动修复；是否接入 Git hook 由消费仓决定。扫描退出 `2` 表示未完成，不是通过。
+
+特殊测试、库内部实现和已登记的语法糖缺口可以在调用处跳过当前检测。跳过必须写出原因，支持下面两种形式：
 
 ```cpp
 // bbt-lint: ignore-next-line coroutine-sugar -- explicit stack size is required here
 g_scheduler->RegistCoroutineTask(stack_size, callback);
+
+detail::Hook_Sleep(1); // bbt-lint: ignore coroutine-sugar -- verifies the raw hook
 ```
 
-同一行可用 `bbt-lint: ignore coroutine-sugar`；也识别 `NOLINT(coroutine-sugar)` 和 `NOLINTNEXTLINE(coroutine-sugar)`。这些标记只针对该规则。
+同一行可用 `bbt-lint: ignore coroutine-sugar`；规则也接受 `NOLINT(coroutine-sugar)` 和 `NOLINTNEXTLINE(coroutine-sugar)`。这些标记只针对 `coroutine-sugar`，不关闭其他规则。

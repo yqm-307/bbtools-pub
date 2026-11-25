@@ -5,6 +5,7 @@ enforce_blocks = true
 
 [scan]
 rules = ["T101", "T102", "T201", "T301", "T302", "T303", "T304", "T401", "T501", "T601"]
+# 严格使用 bbtools 协程语法糖的仓库，将 coroutine-sugar 加入 scan.rules、commit.rules 和 push.rules。
 
 # T 规则只放 scan：hook 中遇到条件编译（#if/#ifdef）或复杂宏会判为解析不完整并 exit 2，warn 不能降级。
 [commit]

@@ -41,9 +41,11 @@ private:
 
 private:
     size_t m_progress{0};
-    bool m_is_flag{false}; // 关闭后仍保留当前进度。
 
-    /**
+    /* 关闭后仍保留当前进度。 */
+    bool m_is_flag{false};
+
+    /*
      * 复杂状态的所有权和失效条件写在成员上方，避免把重要约束压缩到行尾。
      */
     ProgressData m_data;
