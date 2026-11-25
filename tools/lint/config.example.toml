@@ -61,3 +61,27 @@ rule = "T501"
 path = "*"
 symbol = "kRpcV2*"
 reason = "bbtools RPC 公开常量属于兼容契约，不是内部迁移名"
+
+# 复制到独立审查配置后取消注释，再以 --design --config 显式传入。
+# [design]
+# rules = ["design.primitive-parameter-pair", "design.resource-release-paths", "design.cross-object-lock", "design.callback-multiple-paths", "design.private-header-boundary", "design.forbidden-target-edge", "design.forwarding-layer", "design.boolean-branch-switch", "design.state-gated-operation", "design.caller-maintains-owner-state", "design.test-seam-in-production", "design.empty-value-on-failure", "design.logging-only-catch", "design.nested-retry-clue", "design.retired-symbol", "design.repeated-declaration", "design.versioned-entry", "design.identical-branch-tokens", "design.comment-restates-code", "design.query-shaped-consumption"]
+# manual = ["design.co-written-fields", "design.group-forwarding", "design.cochanged-mapping", "design.interface-consumers", "design.repeated-validation", "design.legacy-implementation", "design.mixed-operation-body", "design.consecutive-forwarders"]
+# cdb = "build-vscode/compile_commands.json"
+# [design."design.private-header-boundary"]
+# private = ["runtime/internal/*.h"]
+# allow = ["runtime/internal/test_support.h"]
+# [design."design.private-header-boundary".targets]
+# "app/*" = "app"
+# "runtime/*" = "runtime"
+# [design."design.forbidden-target-edge".graph]
+# targets = { "core/*" = "core", "app/*" = "app", "assembly/*" = "assembly" }
+# forbidden = [["core", "app"]]
+# assembly = ["assembly"]
+# [design."design.test-seam-in-production"]
+# forbidden = ["ForTest*"]
+# test_targets = ["tests/*"]
+# [design."design.test-seam-in-production".targets]
+# "src/*" = "production"
+# "tests/*" = "tests"
+# [design."design.versioned-entry"]
+# contract_file = "docs/migration.md"
