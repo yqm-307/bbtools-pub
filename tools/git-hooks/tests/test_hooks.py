@@ -186,6 +186,81 @@ class HooksTest(unittest.TestCase):
         meta.write_text(meta.read_text() + 'extra = "x"\n')
         self.assertIn('unknown', self.commit(ok=False).stderr)
 
+    def severity_rule(self, name):
+        rule = self.tools.parent / f'lint/rules/{name}/main.py'
+        rule.parent.mkdir(parents=True, exist_ok=True)
+        rule.write_text('import json,sys\nprint(json.dumps({"code":"E-PROBE","problems":["a.cc:3: bad"]}))\nsys.exit(1)\n')
+        meta = dict(id=name, interface='git-change', kind='auto', title='probe title', fix='probe fix', docs='docs/x.md')
+        (self.tools.parent / f'lint/rules/{name}/meta.toml').write_text(
+            ''.join(f'{k} = "{v}"\n' for k, v in meta.items()))
+
+    def test_error_level_collects_failures_and_runs_rest(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe')
+        self.setting('schema_version=2\n[commit]\nrules=["probe","whitespace"]\n[rules.probe]\nlevel="error"\n')
+        p = self.commit(ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('FAIL probe', p.stderr)
+        self.assertIn('PASS whitespace', p.stderr)
+        self.assertIn('未通过的阻断规则：probe', p.stderr)
+        self.assertIn('怎么办：probe fix', p.stderr)
+
+    def test_error_level_collects_multiple_failures(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe-a')
+        self.severity_rule('probe-b')
+        self.setting('schema_version=2\n[commit]\nrules=["probe-a","probe-b"]\n[rules.probe-a]\nlevel="error"\n[rules.probe-b]\nlevel="error"\n')
+        p = self.commit(ok=False)
+        self.assertIn('未通过的阻断规则：probe-a, probe-b', p.stderr)
+
+    def test_fatal_still_fails_fast(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe')
+        self.setting('[commit]\nrules=["probe","whitespace"]\n')
+        p = self.commit(ok=False)
+        self.assertIn('FAIL probe', p.stderr)
+        self.assertNotIn('PASS whitespace', p.stderr)
+
+    def test_warn_and_notice_do_not_block_and_not_pass(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe')
+        self.severity_rule('probe-n')
+        self.setting('schema_version=2\n[commit]\nrules=["probe","probe-n","whitespace"]\n'
+                     '[rules.probe]\nlevel="warn"\n[rules.probe-n]\nlevel="notice"\n')
+        p = self.commit()
+        self.assertIn('WARN probe', p.stderr)
+        self.assertIn('问题：a.cc:3: bad', p.stderr)
+        self.assertIn('NOTE probe-n', p.stderr)
+        self.assertNotIn('PASS probe', p.stderr)
+        self.assertIn('PASS whitespace', p.stderr)
+
+    def test_invalid_and_legacy_level_rejected(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe')
+        for bad in ('block', 'info'):
+            self.setting(f'schema_version=2\n[commit]\nrules=["probe"]\n[rules.probe]\nlevel="{bad}"\n')
+            self.assertIn('level must be one of', self.commit(ok=False).stderr)
+
+    def test_error_level_cannot_be_skipped_when_enforced(self):
+        self.put('seed.txt', 'changed\n')
+        self.git('add', 'seed.txt')
+        self.severity_rule('probe')
+        self.severity_rule('probe-w')
+        self.setting('schema_version=2\nenforce_blocks=true\n[commit]\nrules=["probe","probe-w"]\n'
+                     '[rules.probe]\nlevel="error"\n[rules.probe-w]\nlevel="warn"\n')
+        p = self.git('commit', '-qm', 'x\n\n--skip-rules probe', ok=False)
+        self.assertIn('mandatory rules cannot be skipped: probe', p.stderr)
+        # warn 级允许跳过：skip 生效不报 mandatory；probe(error) 违规仍阻断提交
+        p = self.git('commit', '-qm', 'x\n\n--skip-rules probe-w', ok=False)
+        self.assertNotIn('mandatory rules cannot be skipped', p.stderr)
+        self.assertIn('SKIP probe-w', p.stderr)
+        self.assertIn('FAIL probe', p.stderr)
+
     def test_every_shipped_rule_has_valid_meta_and_docs(self):
         sys.path.insert(0, str(SOURCE / 'core'))
         try:

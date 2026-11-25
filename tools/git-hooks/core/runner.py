@@ -15,7 +15,7 @@ import tomllib
 HOME = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HOME.parent / 'lint/core'))
 import registry
-from configuration import CONFIG as LINT_CONFIG, load_config, validate
+from configuration import BLOCKING, CONFIG as LINT_CONFIG, load_config, validate
 
 META_KEYS = registry.META_KEYS
 CONFIG = '.config/bbt-git-hooks.toml'
@@ -146,9 +146,13 @@ def message_skips(path):
     return values
 
 
+def level_of(cfg, rule):
+    return cfg['rules'].get(rule, {}).get('level', 'fatal')
+
+
 def execute(stage, cfg, skipped, context):
     rules = cfg[stage]['rules']
-    passed, skip_list = [], []
+    passed, skip_list, failures = [], [], []
     for i, rule in enumerate(rules):
         if rule in skipped:
             print(f'SKIP {rule}', file=sys.stderr)
@@ -161,7 +165,8 @@ def execute(stage, cfg, skipped, context):
         command = [sys.executable, '-I', str(script)]
         if meta['interface'] == 'cpp':
             command = [sys.executable, '-I', str(HOME.parent / 'lint/core/hook.py'), rule]
-        warning = False
+        level = level_of(cfg, rule)
+        failed = advisory = False
         # Kill the rule process group on timeout, including formatter children.
         with subprocess.Popen(command, stdin=subprocess.PIPE,
                               stdout=subprocess.PIPE, text=True, start_new_session=True) as p:
@@ -173,20 +178,37 @@ def execute(stage, cfg, skipped, context):
                 raise HookError(f'{rule}: timeout; remaining rules not run') from None
             if p.returncode == 1:
                 rep = parse_report(rule, out)
-                pending = [r for r in rules[i + 1:] if r not in skipped]
-                if cfg['rules'].get(rule, {}).get('level', 'block') != 'warn':
-                    print(render(rule, meta, rep, passed, skip_list, pending), file=sys.stderr)
-                    return 1
-                warning = True
-                print(f'WARN {rule}  [{rep["code"]}]  {meta["title"]}', file=sys.stderr)
-                for problem in rep['problems']:
-                    print(f'  问题：{problem}', file=sys.stderr)
+                if level in BLOCKING:
+                    failed = True
+                    failures.append((rule, meta, rep))
+                    if level == 'fatal':
+                        pending = [r for r in rules[i + 1:] if r not in skipped]
+                        print(render(rule, meta, rep, passed, skip_list, pending), file=sys.stderr)
+                        return 1
+                    print(f'FAIL {rule}  [{rep["code"]}]  {meta["title"]} (error, 继续执行其余规则)', file=sys.stderr)
+                elif level == 'warn':
+                    advisory = True
+                    print(f'WARN {rule}  [{rep["code"]}]  {meta["title"]}', file=sys.stderr)
+                    for problem in rep['problems']:
+                        print(f'  问题：{problem}', file=sys.stderr)
+                else:  # notice: 一行简注，不逐条展开
+                    advisory = True
+                    print(f'NOTE {rule}  [{rep["code"]}]  {meta["title"]}: {len(rep["problems"])} 条候选', file=sys.stderr)
             if p.returncode not in (0, 1):
                 print(f'ERROR {rule}: remaining rules not run', file=sys.stderr)
                 return 2
-        if not warning:
-            print(f'PASS {rule}', file=sys.stderr)
-            passed.append(rule)
+        if failed or advisory:
+            continue
+        print(f'PASS {rule}', file=sys.stderr)
+        passed.append(rule)
+    if failures:
+        print('未通过的阻断规则：' + ', '.join(rule for rule, _, _ in failures), file=sys.stderr)
+        for rule, meta, rep in failures:
+            print(f'FAIL {rule}  [{rep["code"]}]  {meta["title"]} ({meta["kind"]})', file=sys.stderr)
+            for problem in rep['problems']:
+                print(f'  问题：{problem}', file=sys.stderr)
+            print(f'  怎么办：{rep.get("fix") or meta["fix"]}', file=sys.stderr)
+        return 1
     return 0
 
 
@@ -227,7 +249,7 @@ def entry(stage):
         values += message_skips(args.message_file)
     skipped = skip_rules(values, cfg[stage]['rules'])
     if cfg['enforce_blocks']:
-        mandatory = sorted(r for r in skipped if cfg['rules'].get(r, {}).get('level') != 'warn')
+        mandatory = sorted(r for r in skipped if level_of(cfg, r) in BLOCKING)
         if mandatory:
             raise HookError(f'mandatory rules cannot be skipped: {", ".join(mandatory)}')
     context = snapshot(cfg) if stage == 'commit' else {

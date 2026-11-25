@@ -44,7 +44,18 @@ Git 入口保留在 `tools/git-hooks/hooks/`；阶段目录只保留入口，规
 
 全量模式读取工作区 `.h/.hh/.hpp/.hxx/.c/.cc/.cpp/.cxx`，不跟随源码软链接。文本 stdout 为 `file:line rule warn message`，stderr 为覆盖摘要；JSON 包含有效配置、逐项命中、按规则计数、排除文件、抑制数量及解析不完整文件。路径相对 `--root`；计数是诊断条目数，不是缺陷数。
 
-退出码：全量 **0** 表示未检测到扫描覆盖错误，即使有告警也不返回 1；**2** 表示输入/配置错误、无源码或解析不完整，不是通过。hook **0** 表示没有阻断项（可以有 WARN），**1** 表示规则违规且配置为阻断，**2** 表示工具/配置/解析错误；错误不能用 warn 降级。hook 按配置顺序执行，阻断或错误时首错即停；warn 会打印诊断并继续，不能称为 PASS。
+退出码：全量 **0** 表示未检测到扫描覆盖错误，即使有告警也不返回 1；**2** 表示输入/配置错误、无源码或解析不完整，不是通过。hook **0** 表示没有阻断项（可以有 WARN/NOTE），**1** 表示存在 fatal/error 级违规，**2** 表示工具/配置/解析错误；错误不能用 warn 降级。hook 按配置顺序执行：fatal 级违规首错即停，error 级违规记为未通过、继续执行其余规则、结尾统一报告并退出 1；warn 打印逐条诊断并放行，notice 只打印一行简注并放行，两者都不能称为 PASS。
+
+hook 违规级别（`[rules.<id>].level`，默认 `fatal`）：
+
+| level | 违规时行为 | 用途 |
+|---|---|---|
+| `fatal` | 首错即停，退出 1 | 必须立即处理的确定性检查（格式、密钥等） |
+| `error` | 记为未通过，继续跑完其余规则，结尾统一报告，退出 1 | 阻断提交但希望一次看全所有违规 |
+| `warn` | 逐条打印诊断，放行 | 人工复核候选 |
+| `notice` | 一行简注（规则名与条数），放行 | 低优先候选，只提示存在感 |
+
+工具/配置/解析错误始终是退出码 2，不属于任何 level、不能降级。schema 1 的旧配置没有 level 概念，行为等同全部 fatal（与原 block 一致）；唯一的例外是 header-implementation，它在两种 schema 下都被固定为 warn/notice。
 
 hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用 index 冻结 tree，push 使用实际推送对象和旧远端/新分支边界；不读未暂存源码，不扫描无改动文件。头实现配对也基于同一 Git tree。既有 `comment-form` 仍只检查与新增/修改行相交的注释，`secrets` 仍只查新增行，`template-layout` 仍只查新增路径，其他既有检查的范围不变。
 
@@ -102,7 +113,7 @@ CHECKS = [Check('example-marker', 'explicit-review-marker', 'clue', check,
 | `[[retired]]` | `path` 为仓内路径 glob，`symbols` 为本作用域已经确认退役的 ASCII 标识符数组。按仓维护。 |
 | `[scan].rules` | 全量启用的 C++ 规则 ID，顺序执行；省略时从 meta 的 `default_enabled` 发现 |
 | `[commit].rules` / `[push].rules` | 各阶段启用的规则 ID 数组；不存在阶段绑定目录 |
-| `[rules.<id>].level` | `block`（默认）或 `warn`，只影响 hook 违规，不改变全量告警模式 |
+| `[rules.<id>].level` | `fatal`（默认）/`error`/`warn`/`notice`，只影响 hook 违规，不改变全量告警模式；语义见上文级别表 |
 | `[rules.<id>].options` | 覆盖规则 meta 中的正整数阈值；未知阈值拒绝 |
 | `[scope].exclude` | 路径 glob 数组，缩小源码检查范围；既有 whitespace/secrets 保留原范围 |
 | `[layout]` | `allowed_roots` / `allowed_gitlinks` 为精确路径数组，只被 new-root 和 third-party-layout 读取；默认空，启用对应规则时不可为空 |
@@ -120,7 +131,7 @@ CHECKS = [Check('example-marker', 'explicit-review-marker', 'clue', check,
 [示例配置](config.example.toml) 在两个阶段都运行 whitespace、format、comment-form、template-layout、retired-symbol 和 header-implementation。前三项按现有范围检查。template-layout 拦截新增的旧式路径。推送额外执行 review-ticket、llm-review 和 secrets。采用前核对本仓排除路径、退役名与原有检查，迁移到单一配置并启用两个 Git 入口。
 
 - **阻断**。retired-symbol 只在 `[[retired]].path` 匹配的手写 C/C++ 文件逐行检查本次新增或改动的物理行。匹配完整标识符，跳过字符串、注释和 include 路径。显式路径独立于 `scope.exclude`，使已列入退役范围的测试接缝也能被检查。宏拼接、跨行拼写和文档迁移需要另行验收。
-- **告警**。header-implementation 在改动涉及的接口头函数上报告能识别的模板体，以及带分支、循环、加锁、分配等线索的普通函数体。输出位置和目标文件建议。该规则只允许 `warn`，普通 getter、需要调用处可见的 constexpr 定义和 `__T` 实现头可保留。词法匹配仅为人工挑选候选，复杂语法可能漏报。
+- **告警**。header-implementation 在改动涉及的接口头函数上报告能识别的模板体，以及带分支、循环、加锁、分配等线索的普通函数体。输出位置和目标文件建议。该规则只允许 `warn` 或 `notice`，普通 getter、需要调用处可见的 constexpr 定义和 `__T` 实现头可保留。词法匹配仅为人工挑选候选，复杂语法可能漏报。
 - **运行边界**。提交看暂存对象，推送看各目标树相对基线的净变更。工具和配置错误保持退出码 2。规则集读取本地工作区配置，Git 的 `--no-verify` 仍可绕过客户端。托管端强制合入需要独立的 required check。
 
 ### 目录布局规则（默认关闭）
@@ -155,7 +166,7 @@ Git 专用脚本通过返回 0；违规退出 1，并在 stdout 输出一个 JSO
 
 1. 复制 `rules/_template/` 到 `rules/my-rule/`，把 meta 的 id 改为 `my-rule`，填写标题、修法和文档路径。
 2. 在 `main.py` 填写 `check(source, options)`；需要阈值时只在同目录 meta 的 `[options]` 定义默认值。
-3. 配置数组加一行/一个 ID：全量加到 `scan.rules`，hook 加到 `commit.rules` 或 `push.rules`；用 `[rules.my-rule] level = "warn"` 选择不阻断。新增目录不会自动开启 hook。C++ 规则放进 hook 前先确认改动文件不含条件编译或复杂宏：解析不完整时 hook 返回 2，`warn` 不能降级。
+3. 配置数组加一行/一个 ID：全量加到 `scan.rules`，hook 加到 `commit.rules` 或 `push.rules`；用 `[rules.my-rule] level = "error"` 选择阻断但继续执行其余规则，`"warn"`/`"notice"` 选择放行。新增目录不会自动开启 hook。C++ 规则放进 hook 前先确认改动文件不含条件编译或复杂宏：解析不完整时 hook 返回 2，`warn` 不能降级。
 
 ## C++ 候选规则
 
