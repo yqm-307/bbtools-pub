@@ -34,6 +34,48 @@ Git 入口保留在 `tools/git-hooks/hooks/`；阶段目录只保留入口，规
 
 hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用 index 冻结 tree，push 使用实际推送对象和旧远端/新分支边界；不读未暂存源码，不扫描无改动文件。头实现配对也基于同一 Git tree。既有 `comment-form` 仍只检查与新增/修改行相交的注释，`secrets` 仍只查新增行，`template-layout` 仍只查新增路径，其他既有检查的范围不变。
 
+## 设计检查（显式启用，只报告）
+
+从 [config.example.toml](config.example.toml) 复制注释中的 `[design]` 段到独立审查配置，填写项目自己的头边界、目标、禁边及迁移契约。要共用 `[scope]`、`[rules]`、`[[retired]]` 等设置，可把现有配置复制到审查文件再追加该段；不要把 `[design]` 写进供旧 hook 调用的自动发现配置。
+
+完整的使用契约、28 个检查键、报告状态、扩展方式和当前边界见 [设计检查使用说明](docs/design-checks.md)。
+
+```sh
+python3 tools/lint/lint.py --root /path/to/fixed-snapshot --config /path/to/design.toml --design --format json
+python3 tools/lint/lint.py --root /path/to/fixed-snapshot --config /path/to/design.toml --design --check design.caller-maintains-owner-state --format json
+```
+
+- 普通模式不变。设计模式只选择 `[design].rules` 与 `[design].manual` 启用项；`--check` 缩小输出范围，不强制启用。未指定 `--check` 时列出六类 28 个内置键，包括 `disabled`。
+- 语义项使用本机 `PATH` 上已安装且受信任的 clangd，实测后端 23.1.0。`cdb` 以 `--root` 为基准，默认 `build-vscode/compile_commands.json`；1.1 与 3.3 需要该文件。没有 CDB 而允许试探的静态项用固定 C++17、`-I <root>` 解析，不能当成构建配置。CDB 应对应所查快照；每个文件只支持一种配置。工具不执行 CDB 命令，也不使用消费仓 `.clangd`、编译器插件、驱动查询或项目脚本。只接受语言版本、宏定义/撤销、包含目录和受控语法检查选项；遇到不支持的选项会报告未覆盖。clangd 的临时配置在系统临时目录（尊重 `TMPDIR`）；不建后台索引。
+- 2.1、2.2 使用 clangd 解析的实际 include；目标与禁止关系来自配置，不从路径名猜测；2.2 不覆盖链接或全局符号依赖。3.4 的 `forbidden` 约束已归属生产目标的函数声明拼写，并不证明 ABI 可见性。T102/T401/T601/T501/T202 的原候选由 `Scan` 复用，词法事实不等于语义判决。
+- 2.4、5.1、5.2、5.3 加 `--baseline <rev>`，且 `--root` 必须为 Git 仓根；历史检查读取 `baseline..HEAD` 的 Git 对象，不读取 index。5.1 复用既有 `retired-symbol` 的新增行协议。要让 AST 和历史证据对应同一版本，用干净的固定提交快照，而不是在有本地修改的工作树混合两类结果。
+- `checks` 和 `counts.by_key` 明列零命中；`not_reported` 只表示该检查支持的形状无命中。`uncovered`、`manual_pending`、`disabled` 和 `coverage.missing_inputs/partial` 都不是干净。JSON 的 `coverage.tus` 列出实际解析的 TU，`index=none` 表示不证明跨 TU 语义。`candidate` 是线索，未运行行为重放；`violation` 只对显式声明的机器可判约束。退出 0 是生成报告且无选中项为 `uncovered`，即使报候选或违规；2 是工具/配置问题或启用项未覆盖。
+- 2.3 保留无法由 AST 解析的 T401 线索及其位置，标记 `CHAIN_UNRESOLVED`；没有 T401 线索时不生成 finding，即使词法范围本身未覆盖完整。1.3、4.3、6.3 的空证据包用 `checks[].reason` 说明为什么没有可交接的证据；实际覆盖不足才报 `CHAIN_PARTIAL` / `FLOW_PARTIAL`，不从空包推断契约缺失。
+
+**增添/停用示例。** 在受信任的工具副本中创建 `rules/_design/example.py`。消费仓不能通过配置指定 Python 插件路径：
+
+```python
+from design import Check
+
+
+def check(ctx, result):
+    for path, text in ctx.sources.items():
+        for n, line in enumerate(text.splitlines(), 1):
+            if line.rstrip().endswith('DESIGN-REVIEW?'):
+                result.gap('MARKER_UNRESOLVED', f'{path}:{n}: ambiguous review marker')
+            elif line.rstrip().endswith('DESIGN-REVIEW'):
+                result.add(path, n, 'DESIGN-REVIEW', 'explicit text marker',
+                           {'marker': 'DESIGN-REVIEW'})
+
+
+CHECKS = [Check('example-marker', 'explicit-review-marker', 'clue', check,
+                missing_codes=('MARKER_UNRESOLVED',))]
+```
+
+把 `"example-marker"` 加到 `[design].rules`，用 `--check example-marker` 运行。移除该键可停用；其他项仍按各自配置执行，入口无需修改。设计插件是受信任的产品代码；新增检查应声明使用的证据与不能检查的输入，并有正反例。
+
+`Check(..., missing_codes=...)` 只登记当前检查的特殊缺输入码，不是消费配置项；不用特殊码可省略该参数。`NO_AST`、`NO_INDEX`、`NO_BUILD_DB`、`NO_TARGET_GRAPH`、`NO_BOUNDARY_DECL`、`NO_CONTRACT`、`NO_BASELINE`、`NO_HISTORY`、`NO_BEHAVIOR_HARNESS` 是共用码，不必重复登记。`result.gap(...)` 或 `result.add(..., missing=...)` 使用未登记的特殊码时，工具报错退出 2，不生成报告。示例中 `DESIGN-REVIEW` 仍产生候选；`DESIGN-REVIEW?` 表示无法确定，报告 `uncovered/MARKER_UNRESOLVED`。
+
 ## 一仓一份配置
 
 新配置为仓根 `.config/lint.toml`，完整示例见 [config.example.toml](config.example.toml)。全量入口缺省从 `--root` 向上查找它，或用 `--config` 显式指定。hook 仍支持原 `.config/bbt-git-hooks.toml` 的 schema 1；也可在该旧路径直接升级为 schema 2，但全量入口须显式指定。两个配置文件同时存在时报错，不做隐式合并。未迁移旧配置的仓库不需要任何修改；无配置的 hook 保持既有默认规则，新 schema 未写的 hook 阶段默认为空。

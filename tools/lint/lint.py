@@ -16,13 +16,21 @@ def main():
     parser.add_argument('--root', type=Path, required=True, help='源码目录；输出与排除路径相对于它')
     parser.add_argument('--config', type=Path, help='统一 TOML 配置；缺省向上查找 .config/lint.toml')
     parser.add_argument('--format', choices=('text', 'json'), default='text')
+    parser.add_argument('--design', action='store_true', help='运行只报告的设计检查')
+    parser.add_argument('--check', action='append', default=[], help='只列指定设计检查，可重复')
+    parser.add_argument('--baseline', help='设计历史检查的 Git 基准')
     args = parser.parse_args()
+    if not args.design and (args.check or args.baseline):
+        parser.error('--check and --baseline require --design')
     try:
         root = args.root.resolve(strict=True)
         if not root.is_dir():
             raise ValueError('root must be a directory')
         path = args.config or next((p / CONFIG for p in (root, *root.parents)
                                     if (p / CONFIG).is_file()), None)
+        if args.design:
+            from design import run
+            return run(root, path, args)
         cfg = load_config(path)
         scan = Scan(root, cfg, cfg['scan']['rules'])
         for file in sorted(root.rglob('*')):
