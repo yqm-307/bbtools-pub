@@ -21,3 +21,16 @@
 正例：`bbtco_noexcept(&ok) [lease] { ... };` 一眼读出“启动协程并检查注册结果”；需要 128 KiB 栈时直接调用带栈大小的重载，旁边写“语法糖暂无栈大小入口，见已知缺口”。
 
 反例：同一个仓里同一种意图一处写 `bbtco`，一处写 `g_scheduler->RegistCoroutineTask(...)`，又没有说明原因，读者无法判断两种写法是否有语义差别；或者为了避开缺口去读 Scheduler 内部再自己拼一套。
+
+## 2 检查低层调用
+
+在[消费仓 lint 配置](../../tools/lint/README.md#一仓一份配置)的 `scan.rules` 中显式加入 `coroutine-sugar`，即可扫描调度、挂起、同步原语工厂和 async 内部 helper 的直接使用候选。它只按源码词法匹配，不解析类型，也不自动修复；是否接入 Git hook 由消费仓决定。扫描退出 `2` 表示未完成，不是通过。
+
+验证底层接口的用例、协程库内部或已知语法糖缺口，可以在调用处标注例外；说明为何仍需直接调用。例如：
+
+```cpp
+// bbt-lint: ignore-next-line coroutine-sugar -- explicit stack size is required here
+g_scheduler->RegistCoroutineTask(stack_size, callback);
+```
+
+同一行可用 `bbt-lint: ignore coroutine-sugar`；也识别 `NOLINT(coroutine-sugar)` 和 `NOLINTNEXTLINE(coroutine-sugar)`。这些标记只针对该规则。

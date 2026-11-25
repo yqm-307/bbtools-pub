@@ -1,0 +1,8 @@
+id = "coroutine-sugar"
+interface = "cpp"
+kind = "auto"
+title = "协程语法糖直接调用约束"
+fix = "使用对应的 bbtco / bbt_co_* 语法糖；特殊场景在调用处写 bbt-lint ignore 注释并说明原因"
+docs = "docs/cpp/coroutine.md"
+default_enabled = false
+[options]
