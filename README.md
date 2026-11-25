@@ -78,6 +78,7 @@
 
 ## 本地工程工具
 
+- [C/C++ 格式化工具](tools/format/README.md)：按目标仓格式配置检查暂存区或全仓，也可格式化改动文件。
 - [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
 - [本地 Git hooks](tools/git-hooks/README.md)：保留 commit/push 入口及旧配置兼容；规则与配置机制统一见 [lint](tools/lint/README.md)。
 

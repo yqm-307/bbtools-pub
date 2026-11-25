@@ -119,6 +119,7 @@ Git 专用脚本通过返回 0；违规退出 1，并在 stdout 输出一个 JSO
 | T401 | 无字段类的全部操作都是 static 单调用内联定义，至少 `forwarders = 2`；不判断 ABI 或适配价值 |
 | T501 | 标识符含大写 V 加数字；不查字符串、注释、数字值，不自动改名 |
 | T601 | 生产范围标识符含 ForTest/TestAccess/for_test/test_inject；不追踪匿名测试全局状态 |
+| `coroutine-sugar` | 默认关闭；按标识符筛查协程低层调用候选，启用与例外见 [协程语法糖](../../docs/cpp/coroutine.md#2-检查低层调用) |
 
 ## 覆盖边界与验证
 
