@@ -2,6 +2,20 @@
 
 规则独立于 Git 阶段；同一 C++ 检查用于全量存量清单和 hook 改动文件。Python 3.11+ 标准库，无安装依赖，不联网、不改源码、不调用模型、不自动启用 hook 或接入 CI。告警是人工复核候选，不是缺陷判决。
 
+## 快速接入
+
+**先跑只读扫描，不改配置或 hook。** 已固定 `bbtools-pub` submodule 的仓库，在消费仓根目录运行：
+
+```sh
+python3 -B third-party/bbtools-pub/tools/lint/lint.py --root .
+```
+
+其他 C/C++ 项目也可以用独立检出的 pub，把脚本路径换成该检出中的 `tools/lint/lint.py`；仅扫描时，目标无需是 Git 仓库。建议固定到 pub `main` 已合入的版本。`--root` 可以改成实际的手写源码目录，避免首次把第三方代码、构建输出也扫进去；报告和排除路径都相对于该目录。没有找到 `.config/lint.toml` 且未传 `--config` 时使用默认扫描规则；旧 `.config/bbt-git-hooks.toml` 不会被这条命令自动读取。默认扫描不需要 clang-format。
+
+**先固定扫描范围和规则，再决定是否设为门禁。** 新仓可先在 `.config/lint.toml` 写 `schema_version = 2` 和一个 `[scan]` 的 `rules` 列表。已有 schema 1 hook 的仓库可以保持原样试扫；要接入新规则，再把现有配置迁到 schema 2，显式保留实际启用的阶段、规则顺序与排除项。不要同时保留两个配置文件，也不要整份照搬 [bbtools 配置示例](config.example.toml)：退役符号、排除路径和审查规则是采用方的策略。如何接到本地 Git，见 [Git hooks](../git-hooks/README.md#本地启用)。
+
+**接入 CI 时先决定要检查什么。** 消费仓可在 checkout 到固定的 pub 版本后运行同一全量命令。退出 `0` 仍可能有告警，退出 `2` 表示扫描未完整完成；只接命令退出码不会把告警变成阻断。先在代表性目录确认覆盖情况，再决定哪些规则要进必过检查。仓库可复用不等于语言通用：目前全量源码扫描面向 C/C++，`coroutine-sugar` 等家族规则按需显式启用。
+
 ## 入口与布局
 
 ```sh
@@ -78,13 +92,13 @@ CHECKS = [Check('example-marker', 'explicit-review-marker', 'clue', check,
 
 ## 一仓一份配置
 
-新配置为仓根 `.config/lint.toml`，完整示例见 [config.example.toml](config.example.toml)。全量入口缺省从 `--root` 向上查找它，或用 `--config` 显式指定。hook 仍支持原 `.config/bbt-git-hooks.toml` 的 schema 1；也可在该旧路径直接升级为 schema 2，但全量入口须显式指定。两个配置文件同时存在时报错，不做隐式合并。未迁移旧配置的仓库不需要任何修改；无配置的 hook 保持既有默认规则，新 schema 未写的 hook 阶段默认为空。
+新配置为仓根 `.config/lint.toml`，完整示例见 [config.example.toml](config.example.toml)。全量入口缺省从 `--root` 向上查找它，或用 `--config` 显式指定。已有 schema 1 的仓库见 [Git hook 配置兼容](../git-hooks/README.md#配置兼容)；也可在旧 `.config/bbt-git-hooks.toml` 直接升级为 schema 2，但全量入口须用 `--config` 显式指定旧路径。两份配置并存时，hook 报错而不合并；全量入口仍只读取一份配置。无配置的 hook 保持既有默认规则，新 schema 未写的 hook 阶段默认为空。
 
 | 键 | 意义 |
 |---|---|
 | `schema_version = 2` | 新配置版本；原 schema 1 由 Git 适配层按原默认值转换 |
 | `timeout_seconds = 60` | hook 每个规则子进程超时；超时终止整个进程组 |
-| `enforce_blocks = true` | commit 和 pre-push 拒绝用 `--skip-rules` 跳过本阶段的阻断项。默认 false，兼容旧配置。 |
+| `enforce_blocks = true` | 当 `--skip-rules` 选中本阶段的任一阻断项时，commit 或 pre-push 拒绝此次操作；默认 `false`，允许跳过选中的规则。 |
 | `[[retired]]` | `path` 为仓内路径 glob，`symbols` 为本作用域已经确认退役的 ASCII 标识符数组。按仓维护。 |
 | `[scan].rules` | 全量启用的 C++ 规则 ID，顺序执行；省略时从 meta 的 `default_enabled` 发现 |
 | `[commit].rules` / `[push].rules` | 各阶段启用的规则 ID 数组；不存在阶段绑定目录 |
@@ -161,7 +175,7 @@ Git 专用脚本通过返回 0；违规退出 1，并在 stdout 输出一个 JSO
 | T401 | 无字段类的全部操作都是 static 单调用内联定义，至少 `forwarders = 2`；不判断 ABI 或适配价值 |
 | T501 | 标识符含大写 V 加数字；不查字符串、注释、数字值，不自动改名 |
 | T601 | 生产范围标识符含 ForTest/TestAccess/for_test/test_inject；不追踪匿名测试全局状态 |
-| `coroutine-sugar` | 默认关闭；按标识符筛查协程低层调用候选，启用与例外见 [协程语法糖](../../docs/cpp/coroutine.md#2-检查低层调用) |
+| `coroutine-sugar` | 按标识符筛查协程低层调用（Scheduler、Coroutine、同步原语、async 内部接口）候选；默认关闭，严格仓库显式启用；例外写法见 [协程语法糖](../../docs/cpp/coroutine.md#3-用-lint-固化语法糖边界) |
 
 ## 覆盖边界与验证
 

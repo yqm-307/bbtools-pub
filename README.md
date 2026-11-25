@@ -1,6 +1,13 @@
 # bbtools 共用开发规范（根路由）
 
-这份仓库把 bbtools 家族特有的开发规范与本地工程工具聚在一起；通用语言规范与角色方法已迁出，消费仓经本仓根路由进入 `third-party/bbt-agent-toolkit/`（submodule，已固定到 toolkit `main` 已合入的提交）。
+本仓提供 bbtools 家族约定与共享检查工具。通用语言规范和角色提示词由 `bbt-agent-toolkit` 维护，本仓通过 submodule 固定到 toolkit `main` 已合入的提交。项目契约、启用哪些检查以及哪些检查阻断合入，由消费仓自己定义。
+
+| 你要做什么 | 从这里开始 |
+|---|---|
+| 按任务引用编码、设计或构建约束 | [四类约束](#四类约束) |
+| 查角色提示词或工作流 | [角色提示词与工作流](#角色提示词与工作流) |
+| 跑格式、lint 或复杂度检查 | [本地工程工具](#本地工程工具) |
+| 给消费仓接入 Git hook 或 CI 检查 | [接入门禁](#接入门禁) |
 
 ## 先看引用方向
 
@@ -10,32 +17,6 @@
 2. 本仓入口只指向自己目录中的文件。
 3. 同一规则只留一个完整正文，其他地方用短句说明适用层级，不复制整段。
 4. 下游仓引用上游时指向上游根路由（消费仓引 `third-party/bbtools-pub/README.md`），不固定上游内部的职责目录；上游内部路径变动只改上游根路由。例外：上游声明为稳定入口的路径（如 `tools/`、`docs/cpp/`）可直接引用。
-
-### 通用 → toolkit
-
-- 通用原则：`third-party/bbt-agent-toolkit/standards/general/principles.md`
-- 审美与代码品味：`third-party/bbt-agent-toolkit/standards/general/code-taste.md`
-- 注释内容：`third-party/bbt-agent-toolkit/standards/general/documentation.md`
-- C++ 通用写法：`third-party/bbt-agent-toolkit/standards/cpp/style.md`
-- C++ Doxygen 通用写法：`third-party/bbt-agent-toolkit/standards/cpp/documentation.md`
-- C++ 格式：`third-party/bbt-agent-toolkit/standards/cpp/format.md`
-- 角色方法（architect/engineer/qa/reviewer）与多智能体工作流：`third-party/bbt-agent-toolkit/agents/`
-
-### 家族特有 → docs/
-
-- C++ 命名与类型、头文件与类布局、协程语法糖、注释与 Doxygen 排版、构建与测试：`docs/cpp/`
-- 语义复杂度设计与示例配置：`tools/complexity/docs/`
-
-### 工具 → tools/
-
-- 复杂度打分器：`tools/complexity/`
-- 可组合 lint（全量清单与 hook）：[tools/lint/README.md](tools/lint/README.md)
-- 本地 Git hooks：`tools/git-hooks/`
-
-工具应可复用，规则应可组合，不绑定消费仓。
-每条规则独立目录，共用 core；同一源码检查支持全量扫描与 hook 改动文件两种跑法。
-各仓用一份配置选规则、阈值、排除项与 hook 阻断级别。
-新增规则只需复制模板并在配置中加入 ID；机制与扩展说明统一见 [lint 入口](tools/lint/README.md)。
 
 ## 开工与测试前的核对
 
@@ -52,37 +33,45 @@
 
 ## 选择一条阅读路径
 
-第一步读本根路由，再按当前职责进入：
+### 四类约束
 
-| 当前任务 | 入口 | 需要时再展开 |
+四类按任务选用，不是必须读完的一套提示词。引用其中一类，不等于采用其他类或某个角色。
+
+| 类别 | 什么时候读 | 正文入口 |
 |---|---|---|
-| 设计 API、模块边界、失败与关闭语义 | 工具 `agents/architect/`（toolkit） | 语义复杂度指标与告警口径：`tools/complexity/docs/semantic-complexity.md` |
-| 编写或修改实现 | `docs/cpp/`（家族特有 C++） + 工具 `agents/engineer/`（toolkit） | C++ 通用写法 `standards/cpp/style.md` |
-| 评审代码、设计或文档 | 工具 `agents/reviewer/`（toolkit） | 生命周期与扩展专项同 `agents/reviewer/` |
-| 设计、精简行为与回归用例 | 工具 `agents/qa/`（toolkit） | 并发与生命周期、按阶段运行同 `agents/qa/` |
-| 长程任务拆给多个智能体 | 工具 `agents/workflow.md`（toolkit） | 无专项文件；调度器、模型与命令不在本层 |
+| **bbtools 系列仓库编码约束** | 在 bbtools 系列仓写代码，需要确定家族特有的命名、错误返回、类声明布局、协程语法糖或注释排版。 | [bbtools 家族 C++ 约定](docs/cpp/README.md)，按主题选文件。 |
+| **C++ 通用编码约束** | 决定 C++ 代码怎么写，例如 RAII、值语义、智能指针、头文件、Doxygen 或格式；不规定 bbtools 的具体取值。 | toolkit：[C++ 写法](third-party/bbt-agent-toolkit/standards/cpp/style.md)、[文档注释](third-party/bbt-agent-toolkit/standards/cpp/documentation.md)、[格式](third-party/bbt-agent-toolkit/standards/cpp/format.md)。 |
+| **通用 OOP 设计约束** | 设计或评审对象职责、状态、依赖、接口契约与生命周期；判断不依赖某种语言的语法。 | toolkit：[代码品位](third-party/bbt-agent-toolkit/standards/general/code-taste.md)、[设计专项索引](third-party/bbt-agent-toolkit/standards/general/taste/00-overview.md)、[所有权与并发](third-party/bbt-agent-toolkit/standards/general/ownership-and-concurrency.md)。 |
+| **工程构建约束** | 核对构建基线、依赖、编译目标、测试注册或验证结果。 | 先按目标仓的构建与测试入口。bbtools 家族另见 [构建与测试约定](docs/cpp/build-and-test.md)；通用的增量构建、并发和超时做法，目前见 toolkit 的 [Engineer「构建与机器资源」](third-party/bbt-agent-toolkit/agents/engineer/AGENTS.md#构建与机器资源)，还没有独立的通用构建规范。 |
 
-“需要时”由场景入口中的触发条件决定，不按仓库里出现了某个目录就全量加载。例如：改一个普通 C++ 值类型：通用原则 → `docs/cpp/naming-and-types.md`；不读生命周期专项。
+在消费仓的规则入口或任务说明里，写清**何时读取、读取固定版本中的哪个文件、哪些本地约束优先**。例如：在 bbtools 仓改普通 C++ 值类型，读通用 C++ 写法和家族命名约定；如果还涉及对象职责或所有权变化，再读对应的 OOP 设计专项。非 bbtools 仓可直接固定并引用 toolkit，无需引入 pub。只挂链接不会让宿主自动加载；必需规则读不到时，暂停依赖它的步骤并报出路径。
+
+### 角色提示词与工作流
+
+[toolkit 角色入口](third-party/bbt-agent-toolkit/agents/README.md) 提供 architect、engineer、qa、reviewer 的独立身份与接入方式；[工作流](third-party/bbt-agent-toolkit/agents/workflow.md) 说明如何分工与验收。角色说明「谁怎么干活」，上面的四类约束说明「这项工作按什么规则做」，可分别引用。
 
 ## 维护规则
 
-- 同一条规则只有一个完整正文，其他地方用短句说明适用层级，不复制整段。
 - 新增专项前先确认已有场景文件无法承载，且确实有不同触发条件或风险；不要为目录完整而预建空文件。
 - 公共正文只写稳定、可复用的判断方式；过程日志、审查报告、测试输出和私有来源留在仓外证据中。
 - 入口、文件名和命令必须实际存在；改目录后同步更新本文件中的路径，并做链接存在性和环检测。
 - 规范可以精练，但删掉会改变行为判断的约束时，要在新正文或迁移说明中交代去向。
-- 每次遇到新的 badcase，先判断它是否改变当前用户或后来维护者必须知道的事实；需要知道就直接修正唯一真源、代码、测试、文档或提示词中的当前措辞，不把旧句子留着再追加补丁。历史原因默认留在 commit、ADR、审查报告或私有证据中。
-- 只有兼容性、迁移、安全或不可逆决策确实依赖历史时，稳定正文才保留最小背景；Issue 号和阶段叙事不能代替当前契约。Review 必须检查新概念后是否仍残留旧定义。
+- 遇到新的 badcase，按 toolkit [P7：用当前契约修正 badcase](third-party/bbt-agent-toolkit/standards/general/principles.md#p7) 修正唯一真源。Issue 号和阶段叙事不能代替当前契约；Review 仍须检查是否残留旧定义。
 
 历史兼容入口 `docs/conventions.md` 已删除；不再维护第二份正文。
 
 ## 本地工程工具
 
-- [C/C++ 格式化工具](tools/format/README.md)：按目标仓格式配置检查暂存区或全仓，也可格式化改动文件。
-- [复杂度打分器](tools/complexity/README.md)：结构扫描、语义证据评分、基线与 ignore；尚未接入 CI。
+- [C/C++ 格式化工具](tools/format/README.md)：按目标仓格式配置检查暂存区或全仓，也可格式化改动文件；初次使用建议先用 `--check`，不改源码和暂存区。
+- [可组合 lint：快速接入](tools/lint/README.md#快速接入)：用一条命令只读扫描 C/C++，也能用于非 bbtools 仓库；规则与 Git hook 按需启用。
+- [复杂度打分器](tools/complexity/README.md#环境与最短使用路径)：结构扫描、语义证据评分、基线与 ignore；从 pub 运行，`--root` 指向目标仓；用于 Review 辅助，不作为门禁。首次运行先确认 Python 和 lizard 版本。
 - [本地 Git hooks](tools/git-hooks/README.md)：保留 commit/push 入口及旧配置兼容；规则与配置机制统一见 [lint](tools/lint/README.md)。
+
+## 接入门禁
+
+- **Git hook**：从 [本地 Git hooks](tools/git-hooks/README.md) 查 commit/push 接入和旧配置兼容。从 [lint 配置说明](tools/lint/README.md#一仓一份配置) 查如何在消费仓选择规则、阈值、排除项和阻断级别。规则独立目录、共用检查核心，不绑定消费仓。
+- **CI**：从消费仓自己的 workflow 和 `scripts/ci/` 查实际运行的检查与必过项。pub 提供工具入口，不替消费仓启用 CI；本地 hook 结果不是 CI 或合入门禁的结果。
 
 ## 门禁
 
-- 须先获用户授权：commit、push、开 PR、付费调用、破坏性操作、新依赖、CI/发布变更、删除或重命名公开的规范路径与工具入口（可能已被消费仓引用）、改变公共规则的适用范围。任务会产生改动时，开工时一次问清是否授权 commit/push/开 PR，授权覆盖整段任务；未授权则停在 commit 前，交付改动与验证结果。
-- 只改获授权范围，保留他人已有改动；远端写入后回读确认目标对象。
+维护本仓前，读仓根 `AGENTS.md` 的「门禁」。授权、独立审查、已有改动保护和远端写入后的回读要求均以该处为准。
