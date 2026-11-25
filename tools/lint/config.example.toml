@@ -35,6 +35,13 @@ exclude = ["tests/*", "*/tests/*", "proto/*", "*/proto/*", "*.pb.h", "*.pb.cc"]
 [format]
 binary = "clang-format"
 
+# 阻断但跑完其余规则的示例：一次提交看全所有格式与退役符号违规
+[rules.retired-symbol]
+level = "error"
+
+[rules.header-implementation]
+level = "notice"
+
 [rules.T101]
 level = "warn"
 options = { fields = 10 }

@@ -6,6 +6,9 @@ import tomllib
 from registry import ID, defaults, load_meta
 
 CONFIG = '.config/lint.toml'
+# 阻断级别：fatal 首错即停、error 记为未通过继续执行其余规则；warn/notice 只报告不放行失败。
+LEVELS = ('fatal', 'error', 'warn', 'notice')
+BLOCKING = ('fatal', 'error')
 
 
 def string_list(value, name):
@@ -76,14 +79,14 @@ def validate(data):
         raise ValueError('rules must be a table')
     if any('header-implementation' in cfg[stage]['rules'] for stage in ('commit', 'push')):
         settings = cfg['rules'].setdefault('header-implementation', {})
-        if not isinstance(settings, dict) or settings.setdefault('level', 'warn') != 'warn':
-            raise ValueError('header-implementation is warning-only')
+        if not isinstance(settings, dict) or settings.setdefault('level', 'warn') not in ('warn', 'notice'):
+            raise ValueError('header-implementation is warning-only (warn or notice)')
     for rule, settings in cfg['rules'].items():
         meta = load_meta(rule)
         if not isinstance(settings, dict) or set(settings) - {'level', 'options'}:
             raise ValueError(f'{rule}: unknown settings; expected level/options')
-        if settings.get('level', 'block') not in ('warn', 'block'):
-            raise ValueError(f'{rule}: level must be warn or block')
+        if settings.get('level', 'fatal') not in LEVELS:
+            raise ValueError(f'{rule}: level must be one of {"/".join(LEVELS)}')
         options = settings.get('options', {})
         if not isinstance(options, dict) or set(options) - set(meta.get('options', {})):
             raise ValueError(f'{rule}: unknown options')
