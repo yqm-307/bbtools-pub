@@ -64,6 +64,73 @@ LEGAL_64 = {
     'a_bad.h': BAD_64['a.h']}
 MISSING_64 = {'orphan.h': '/* 数量。 */\n\nvoid unrelated();\n'}  # 注释归属不可解析
 
+# 6.4 语料真实误报形状（raw-before.json 241 候选取证；正文均非逐字标签，按 §6.4
+# 「带数值、表达式或多分句/因果/锁/时间约束、分区标题的正文不按名称翻译上报」）：
+FP64 = {
+    'num.h': (
+        '/* 多留 10 字节，否则前缀挤掉正文尾部。 */\n'
+        'char padded[64];\n'),                              # DebugPrint buf：数值+因果
+    'mention.h': (
+        '/* 观测归类用的 kind。 */\n'
+        'int kind{0};\n'),                                   # ICoObject kind：正文仅提及变量名
+    'time.h': (
+        '/* 仅在析构后使用。 */\n'
+        'int after_use{0};\n'),                              # 时间/生命期约束
+    'guard.h': (
+        '/* 锁内不得阻塞。 */\n'
+        'int holder{0};\n'),                                 # 锁内/锁外约束
+    'expr.h': (
+        '/* 除以 1000 换算秒。 */\n'
+        'long scale{0};\n'),                                 # 数值表达式
+    'section.h': (
+        '/* 阶段一：解析协议。 */\n'
+        'int step_code{0};\n'),                              # mem_check：分区标题
+    'clauses.h': (
+        '/* 缓冲给前缀留位置；否则挤掉尾部。 */\n'
+        'char tail[64];\n'),                                 # 多分句因果（无数值/枚举词）
+    'anchor_bad.h': '/* limit。 */\nint limit{0};\n',        # 逐字哨兵仍报
+}
+KNOWN64 = {
+    'plain_cn.h': '/* 数量。 */\nint stock{0};\n',           # 短中文释义仍 unknown candidate
+    'plain_en.h': '/* the count. */\nint tally{0};\n',       # 短英文释义仍 unknown candidate
+    'anchor_bad.h': FP64['anchor_bad.h'],
+}
+
+# 6.2 语料真实误报形状（projected-before.json 215 人工包取证）：
+PIPELINE62 = {
+    'pipeline.cc': (
+        'extern int snprintf(char*, unsigned long, const char*, const char*);\n'
+        'extern int printf(const char*, const char*);\n'
+        'extern int fflush(void*);\n'
+        'extern void* stdout_ref();\n'
+        '// 同一输出工作：格式化、写出、冲刷是一条流水线，不是独立职责（语料 VPrint）。\n'
+        'void write_line(const char* fmt, const char* msg) {\n'
+        '  char padded[128];\n'
+        '  snprintf(padded, 128, fmt, msg);\n'
+        '  printf("%s\\n", padded);\n'
+        '  fflush(stdout_ref());\n'
+        '}\n'
+        'extern int memcmp(const void*, const void*, unsigned long);\n'
+        'extern void record_step(int);\n'
+        'void run_steps(const int* lhs, const int* rhs) {\n'
+        '  // 嵌套 lambda 内的辅助调用不是外层职责（语料 _TrackWaiter）。\n'
+        '  auto step = [lhs]() { record_step(*lhs); };\n'
+        '  step();\n'
+        '  int diff[1];\n'
+        '  // 比较运算调用嵌在条件里，不是顶层操作。\n'
+        '  if (memcmp(lhs, rhs, sizeof(int)) == 0) { diff[0] = 0; }\n'
+        '}\n'),
+    'mixed_bad.cc': (
+        'extern void db_insert(int);\n'
+        'extern void render(int);\n'
+        'int process(const char* raw) {\n'
+        '  int code = raw[0] - 48;\n'
+        '  db_insert(code);\n'
+        '  render(code);\n'
+        '  return code;\n'
+        '}\n'),
+}
+
 BAD_65 = {'q.cc': (
     '#include <deque>\n#include <utility>\n'
     'struct Rec { int id; };\n'
@@ -165,6 +232,17 @@ class LongFunctionMixedReasons(DesignGitCase):
         self.assertFalse(any(f['file'] == 'state_table.cc' for f in rows),
                          '状态表不产生职责候选')
 
+    def test_pipeline_lambda_and_comparison_no_pack(self):
+        """§6.2 语料反例：同一输出工作（snprintf/printf/fflush）、嵌套 lambda 内的
+        辅助调用与比较运算不构成独立职责；既有 BAD 形状的两个独立动作仍出包。"""
+        p, rep, _ = self.one('6.2', PIPELINE62, manual=True)
+        self.assertEqual(p.returncode, 0)
+        rows = self.findings_for(rep, '6.2')
+        self.assertEqual([r['file'] for r in rows], ['mixed_bad.cc'],
+                         '既有两个独立动作的哨兵仍出包')
+        self.assertFalse(any(r['file'] == 'pipeline.cc' for r in rows),
+                         '输出流水线/嵌套 lambda 辅助/比较运算不产生包')
+
 
 class OverFragmentedReading(DesignCase):
     """6.3：人工类——按 §0.3 上限冻结 manual_pending（行内冲突见文件头）。"""
@@ -247,6 +325,32 @@ class CommentRestatesCode(DesignCase):
         self.assertEqual(p.returncode, 2)
         self.expect_status(rep, '6.4', 'uncovered', 'COMMENT_UNRESOLVED/6.4')
         self.expect_missing_code(rep, '6.4', 'COMMENT_UNRESOLVED', 'COMMENT_UNRESOLVED/6.4')
+
+    def test_short_paraphrase_stays_unknown_candidate(self):
+        """短中/英文释义仍出候选且 restates_name=null（不猜语义），逐字哨兵同树仍 true。"""
+        p, rep, _ = self.one('6.4', KNOWN64)
+        self.assertEqual(p.returncode, 0)
+        rows = self.findings_for(rep, '6.4')
+        self.assertEqual([r['file'] for r in rows],
+                         ['anchor_bad.h', 'plain_cn.h', 'plain_en.h'], '三包各一条，不缺不漏')
+        by_file = {r['file']: r for r in rows}
+        self.assertIsNone(by_file['plain_cn.h']['facts']['restates_name'],
+                          '中文释义 → unknown（null），不伪造语义')
+        self.assertIsNone(by_file['plain_en.h']['facts']['restates_name'],
+                          '英文释义 → unknown（null），与中文口径一致')
+        self.assertTrue(by_file['anchor_bad.h']['facts']['restates_name'], '逐字哨兵仍 true')
+
+    def test_corpus_false_positive_shapes_not_reported(self):
+        """§6.4 语料误报形状（数值/表达式/因果/锁或时间约束、正文仅提及变量名、
+        分区标题）不按名称翻译上报；逐字哨兵在同树仍出包。"""
+        p, rep, _ = self.one('6.4', FP64)
+        self.assertEqual(p.returncode, 0)
+        rows = self.findings_for(rep, '6.4')
+        self.assertTrue(rows, '逐字哨兵仍出包（不是漏扫）')
+        exempt = sorted(f for f in FP64 if f != 'anchor_bad.h')
+        offenders = sorted(f['file'] for f in rows if f['file'] in exempt)
+        self.assertFalse(offenders,
+                         f'语料误报形状不得归为复述候选（§6.4）: {offenders}')
 
 
 class NameHidesSideEffect(DesignCase):

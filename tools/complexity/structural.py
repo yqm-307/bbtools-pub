@@ -61,11 +61,15 @@ def sources(root, config, commit=None):
     return files
 
 
-def scan(root, config, commit=None):
+def scan(root, config, commit=None, backend=None, backend_version=None):
     try:
-        import lizard
+        if backend is None:
+            import lizard
+            version = importlib.metadata.version('lizard')
+        else:
+            lizard = backend
+            version = backend_version
         from lizard_languages import get_reader_for
-        version = importlib.metadata.version('lizard')
     except (ImportError, importlib.metadata.PackageNotFoundError) as e:
         raise AnalysisError('lizard is missing; use the documented environment') from e
     require(version == config['structural']['backend_version'], 'lizard version does not match configuration')
@@ -128,6 +132,7 @@ def compare(report, old, config):
         previous[key] = row
     findings = []
     matched = set()
+    current_paths = {row['path'] for row in report['observations']}
     for row in report['observations']:
         key = row['path'], row['unit']
         before = previous.get(key)
@@ -135,8 +140,9 @@ def compare(report, old, config):
             matched.add(key)
         # ponytail: ambiguous moves remain unmatched; AST identity can refine this later.
         if before is None and old:
-            candidates = [(k, v) for k, v in previous.items() if k not in matched and v['unit'] == row['unit'] and v['code_digest'] == row['code_digest']]
-            current_count = sum(v['unit'] == row['unit'] and v['code_digest'] == row['code_digest'] for v in report['observations'])
+            candidates = [(k, v) for k, v in previous.items()
+                          if k not in matched and k[0] not in current_paths and v['unit'] == row['unit']]
+            current_count = sum(v['unit'] == row['unit'] for v in report['observations'])
             if len(candidates) == 1 and current_count == 1:
                 before = candidates[0][1]
                 matched.add(candidates[0][0])

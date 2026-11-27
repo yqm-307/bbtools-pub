@@ -14,7 +14,7 @@
 
 工具不会从目录名推断目标边界，也不会把编译数据库当成目标依赖声明。缺少必要输入时，报告会保留未覆盖状态。未覆盖不能解释为没有问题。
 
-当前实现支持 28 个设计检查键。测试样例已经覆盖这些键的正例、反例、合法例外和缺输入路径。真实消费仓的覆盖范围仍取决于实际编译数据库、契约声明和行为证据。
+当前实现支持 30 个设计检查键。测试样例已经覆盖这些键的正例、反例、合法例外和缺输入路径。真实消费仓的覆盖范围仍取决于实际编译数据库、契约声明和行为证据。
 
 ## 快速开始
 
@@ -27,15 +27,18 @@ python3 tools/lint/lint.py \
   --format json
 ```
 
-执行设计检查需要显式加入 `--design`
+给人审阅时，`--design` 默认输出带源码的诊断清单，重定向即可保存为文本：
 
 ```sh
 python3 tools/lint/lint.py \
   --root /path/to/fixed-snapshot \
   --config /path/to/design.toml \
-  --design \
-  --format json
+  --design > design-diagnostics.txt
 ```
+
+每条以 `文件:行号: 状态 [规则键] 符号` 开头，下方是触发原因和带行号的源码。`>` 指向命中行；有相关证据时，`+` 指向分支、读写或调用位置，不是修改建议。不为行级证据编造列号。历史类线索引用所查 Git 提交的内容。末尾单列覆盖缺口；即使已有诊断，退出 `2` 也不能算扫描完整。
+
+`--format diagnostic` 显式选择这一格式；`--format text` 保留原单行格式，`--format json` 保留结构化报告。普通扫描的默认输出不变。
 
 只运行一个检查键
 
@@ -59,11 +62,29 @@ python3 tools/lint/lint.py \
   --format json
 ```
 
-`--check` 可以重复传入。它只缩小报告范围，不会强制启用配置中没有启用的检查。没有传 `--check` 时，报告会列出全部 28 个内置键，未启用的键显示为 `disabled`。
+`--check` 可以重复传入。它只缩小报告范围，不会强制启用配置中没有启用的检查。没有传 `--check` 时，报告会列出全部 30 个内置键，未启用的键显示为 `disabled`。
+
+评审线索三件套（相似函数、复杂度增量、收紧的转发层候选）都是可选的 `clue` 检查，不进推荐配置，需要时显式启用。一次可复跑的运行示例：
+
+```sh
+python3 tools/lint/lint.py \
+  --root /path/to/fixed-snapshot \
+  --config /path/to/design-review.toml \
+  --design \
+  --check design.similar-functions \
+  --check design.complexity-delta \
+  --check design.forwarding-layer \
+  --baseline HEAD~1 \
+  --format json
+```
+
+其中 `[design]` 启用这三个键，`cdb` 指向与快照一致的编译数据库；`--baseline` 只对复杂度差量和历史检查有意义，不传时复杂度结果标记为存量（`inventory`），不代表新增或恶化。`design.similar-functions` 与 `design.complexity-delta` 需要 lizard 测量后端（见「配置」）；后端缺失时对应检查报 `uncovered/NO_MEASUREMENT_BACKEND`，其余检查结果照常保留，退出码按覆盖规则体现缺口。
 
 ## 配置
 
-完整配置样例在 [config.example.toml](../config.example.toml)。建议复制一份独立审查配置，不要把设计段直接加入旧 hook 使用的自动发现配置。
+[推荐配置](../config.example.toml) 只选可按项目显式约束判定的四项：私有头文件边界、禁止的依赖边、生产目标禁用的测试入口、退役符号。用项目自己的目标、路径和精确禁用项替换示例，不把占位符当契约；没有声明就报告缺口。测试入口必须给出明确的 `forbidden`，否则该检查在部分配置下会退回命名线索。`candidate`、`manual_pending` 都不是已证违规。
+
+仅凭代码形状的线索和人工判断项不进入推荐规则集。专项审查确有需要时再显式开启；已有配置不会自动迁移。请将设计段放在独立的审查配置中，不要改旧 hook 自动发现的配置。
 
 最小配置可以只启用一个检查
 
@@ -87,19 +108,22 @@ cdb = "build-vscode/compile_commands.json"
 | `[design."design.forbidden-target-edge".graph]` | 目标归属、禁止边和装配目标 |
 | `[design."design.test-seam-in-production"]` | 生产代码中的测试接缝命名契约和目标归属 |
 | `[design."design.versioned-entry"]` | 迁移契约文件路径 |
+| `[design."design.similar-functions"].lizard_path` | 当前 Python 环境内的 lizard 1.25.0 安装路径（含 `lizard.py` 或 `lizard/` 包的目录）。仅在启用相似函数或复杂度差量时需要；不配置时按环境内已安装的 lizard 解析，找不到、路径不受信或版本不符时按未覆盖报告 |
+| `[design."design.complexity-delta"].lizard_path` | 同上 |
+| `[design."design.complexity-delta"].config_file` | 可选的 tools/complexity 配置文件（`--root` 内相对路径），复用其阈值与 `bbt/**` 等范围声明；缺省使用 tools/complexity 的默认阈值（圈复杂度 15、认知复杂度 25、NLOC 100、参数数 6） |
 
 `rules` 和 `manual` 不能重复。`manual` 中只能放人工检查键。未知键、未知配置字段和未登记的缺输入码都会返回工具错误。
 
 ### 输入边界
 
 - `--root` 应指向固定的 Git 快照或干净工作树。
-- `cdb` 应由同一个快照生成。工具只接受受控的语言版本、宏定义、包含目录和语法选项。
+- `cdb` 应由同一个快照生成。工具按允许列表重建用于语法分析的命令，从不执行编译数据库中的命令：保留语言版本（含 `-x` 指定的 C/C++ 语言）、宏定义/撤销、包含目录及受支持的优化、PIC、RTTI 等影响解析语义的选项；`-Wp,-D...` 与 `-Wp,-U...` 仅在每个转发项都属于宏定义/撤销白名单时原样保留，保证组合顺序不被改写；`-W*` 警告、`-g` 调试、`-fdiagnostics-*` 等只影响诊断呈现的选项，以及 `-o`、`-MF/-MT/-MQ` 等输出或依赖文件参数会被安全忽略且不产生文件副作用；无法解释的选项仍让对应文件标记未覆盖。没有 CDB 时按后缀使用固定 C++17 或 C11 的静态参数，不代表构建配置；CDB 存在时未入库的文件不猜测编译参数，直接按未覆盖记账，不用伪造配置制造已解析的假象。同一文件有不兼容的多配置时该文件也标记未覆盖，均继续检查其他文件。
 - 工具不会执行编译数据库中的命令，也不会加载项目脚本、编译器插件或驱动查询。
 - 历史检查要求 `--root` 是 Git 仓根，并从 Git 对象读取 `baseline..HEAD` 的变化。
 - 目标边界和禁止依赖必须写进 `[design]` 配置，不能从路径名称猜测。
 - 行为检查可以记录静态事实，但静态事实不能代替取消竞争、重试副作用等运行时回放。
 
-## 28 个检查键
+## 30 个检查键
 
 下表中的判定类来自检查契约。`contract` 表示可以根据显式声明判定，`clue` 表示输出可复核线索，`behavior` 表示需要行为证据才能形成更强结论，`manual` 表示工具只整理人工复核材料。
 
@@ -113,10 +137,10 @@ cdb = "build-vscode/compile_commands.json"
 | `design.callback-multiple-paths` | 1.6 | 取消与完成回调多次触发 | behavior | 回调路径和竞争行为回放 |
 | `design.private-header-boundary` | 2.1 | 私有头文件边界 | contract | clangd include 关系和私有头文件声明 |
 | `design.forbidden-target-edge` | 2.2 | 下层依赖上层 | contract | include 关系、目标图和禁止边声明 |
-| `design.forwarding-layer` | 2.3 | 无收益的转发层 | clue | T401 线索和调用链 |
+| `design.forwarding-layer` | 2.3 | 无收益的转发层 | clue | T401 线索、调用链、调用方与委托目标定位 |
 | `design.cochanged-mapping` | 2.4 | 多模块共同变更 | manual | Git 基准和变更集合 |
 | `design.interface-consumers` | 2.5 | 预留扩展点 | manual | 实现关系和扩展契约 |
-| `design.boolean-branch-switch` | 3.1 | 用布尔值切换多种行为 | clue | AST 分支事实 |
+| `design.boolean-branch-switch` | 3.1 | 用布尔值切换多种行为 | clue | 不在推荐配置中：布尔参数控制分支本身不是设计缺陷。已有配置显式启用时仍按原规则报告 |
 | `design.state-gated-operation` | 3.2 | 隐藏调用顺序 | clue | AST 阶段和契约 |
 | `design.caller-maintains-owner-state` | 3.3 | 调用方维护拥有者状态 | clue | AST 访问序列、调用方和拥有者事实 |
 | `design.test-seam-in-production` | 3.4 | 生产代码泄漏测试接缝 | contract | 函数声明、目标归属和命名契约 |
@@ -129,10 +153,22 @@ cdb = "build-vscode/compile_commands.json"
 | `design.legacy-implementation` | 5.3 | 旧实现仍然存在 | manual | Git 基准、旧实现和 ABI 或动态使用证据 |
 | `design.versioned-entry` | 5.4 | 用版本号代替契约 | clue | 标识符事实和迁移契约 |
 | `design.identical-branch-tokens` | 6.1 | 两个分支内容相同 | clue | AST 归一化分支 |
-| `design.mixed-operation-body` | 6.2 | 长函数承担多种原因 | manual | 函数结构和意图证据 |
+| `design.mixed-operation-body` | 6.2 | 长函数承担多种原因 | manual | 只为含局部声明且有两个不同的顶层 `void` 自由函数调用的函数整理线索。嵌套表达式、回调体、仅返回状态的调用不作独立职责证据；不据此要求拆分 |
 | `design.consecutive-forwarders` | 6.3 | 读取路径过度碎片化 | manual | 调用链和跳转事实 |
-| `design.comment-restates-code` | 6.4 | 注释复述代码 | clue | 注释和声明文本。当前只判逐字重复 |
+| `design.comment-restates-code` | 6.4 | 注释复述代码 | clue | 注释正文只写变量名时才标记 `restates_name=true`。字段和非局部变量的简短中英文标签仍可作人工线索（`null`）；局部步骤说明和带数值、表达式或多分句的解释不按名称翻译上报。普通扫描的 T202 不变 |
 | `design.query-shaped-consumption` | 6.5 | 名称隐藏副作用 | behavior | 函数体、调用关系和行为证据 |
+| `design.similar-functions` | R1 | 跨文件相似函数体 | clue | lizard 原始记号、函数边界；预选后以原始记号验证 |
+| `design.complexity-delta` | R2 | 复杂度增量与存量 | clue | tools/complexity 的测量与基线差量；Git 基准（可选） |
+
+### 评审线索三件套的证据边界
+
+`R1`、`R2` 与收紧后的 `2.3` 都是可选评审线索：输出候选供人复核，不判定违规，不进推荐配置，启用时需要各自声明的输入。
+
+**`design.similar-functions`（R1）** 跨文件找出完全相同的函数体，以及只差少量记号的长函数体。判定全部基于 lizard 的固定分词与函数边界：先按记号摘要与多重集预选候选对，再对原始记号做有序比对。每条命中给出一对函数的两个 `path:line`、双方函数名，以及按原样保留的差异记号——运算符、常量、调用名不做归一化，便于直接看出两份拷贝的真实差别。重叠范围（嵌套 lambda 属于外层函数的窗口）不是拷贝，函数首行或末行与同文件其他函数共享时因无法取得列边界而跳过，短样板（默认原始记号数不足 80，或净行数不足 8）和每个函数超过 4 个配对的高扇出簇视为重复窗口噪声，不上报。已知漏报边界：少于 80 个原始记号的复制体、差异记号合计超过 12 个的弱拷贝，以及经宏、模板实例化或改名工具产生的结构等价但记号不同的复制，都不会命中；这些遗漏属于声明的边界，不是零命中即无问题。
+
+**`design.complexity-delta`（R2）** 复用 tools/complexity 的同一测量器（lizard 1.25.0）、同一函数消歧键和同一差量比较，不另写计数器。传入 `--baseline` 时，只有新增（`new`）或恶化（`worsened`）的超阈函数进入报告，给出位置、基线值、当前值和阈值；没有基线时所有超阈函数明确标记为存量（`inventory`）。测量范围按 tools/complexity 的范围声明（默认 `bbt/**/*.hpp`、`bbt/**/*.cc`）。lizard 后端缺失、基线不可解析或基线扫描不完整时按 `uncovered` 报告缺口，其余检查结果保留；零命中不等于没有超阈函数。基线扫描读取 Git 对象，要求 `--root` 在 Git 仓内。
+
+**`design.forwarding-layer`（2.3，收紧）** 只在调用方、包装层、委托目标三者都能定位时才输出候选：包装方法必须是单一调用直通（参数按序原样传入、返回值原样返回、无附加行为），委托目标可解析，且存在实际调用方。类型标记（`is_base_of` 等 type traits 参与执行域或分派选择）、公开接口边界、所有权语义（智能指针构造与转移）、同步语义（锁与条件变量）命中任一即排除；错误转换或参数适配必然改变单一直通形状，按构造不会成为候选。只有一个实现、没有可定位调用方或目标解析失败时保持未覆盖或不报，不凭单个实现定罪。输出事实包含调用链、委托目标和实际调用方位置。
 
 `T101`、`T401`、`T501`、`T601` 和 `T202` 的既有词法候选可以被设计检查复用。候选线索不会自动升级为设计缺陷。
 

@@ -63,19 +63,21 @@ hook 的 C++ 候选规则扫描本次改动文件的完整内容：commit 使用
 
 从 [config.example.toml](config.example.toml) 复制注释中的 `[design]` 段到独立审查配置，填写项目自己的头边界、目标、禁边及迁移契约。要共用 `[scope]`、`[rules]`、`[[retired]]` 等设置，可把现有配置复制到审查文件再追加该段；不要把 `[design]` 写进供旧 hook 调用的自动发现配置。
 
-完整的使用契约、28 个检查键、报告状态、扩展方式和当前边界见 [设计检查使用说明](docs/design-checks.md)。
+完整的使用契约、30 个检查键、报告状态、扩展方式和当前边界见 [设计检查使用说明](docs/design-checks.md)。
 
 ```sh
 python3 tools/lint/lint.py --root /path/to/fixed-snapshot --config /path/to/design.toml --design --format json
+python3 tools/lint/lint.py --root /path/to/fixed-snapshot --config /path/to/design.toml --design --lang zh --format text
 python3 tools/lint/lint.py --root /path/to/fixed-snapshot --config /path/to/design.toml --design --check design.caller-maintains-owner-state --format json
 ```
 
-- 普通模式不变。设计模式只选择 `[design].rules` 与 `[design].manual` 启用项；`--check` 缩小输出范围，不强制启用。未指定 `--check` 时列出六类 28 个内置键，包括 `disabled`。
-- 语义项使用本机 `PATH` 上已安装且受信任的 clangd，实测后端 23.1.0。`cdb` 以 `--root` 为基准，默认 `build-vscode/compile_commands.json`；1.1 与 3.3 需要该文件。没有 CDB 而允许试探的静态项用固定 C++17、`-I <root>` 解析，不能当成构建配置。CDB 应对应所查快照；每个文件只支持一种配置。工具不执行 CDB 命令，也不使用消费仓 `.clangd`、编译器插件、驱动查询或项目脚本。只接受语言版本、宏定义/撤销、包含目录和受控语法检查选项；遇到不支持的选项会报告未覆盖。clangd 的临时配置在系统临时目录（尊重 `TMPDIR`）；不建后台索引。
+- 普通模式不变。设计模式只选择 `[design].rules` 与 `[design].manual` 启用项；`--check` 缩小输出范围，不强制启用。未指定 `--check` 时列出 30 个内置键，包括 `disabled`。`--lang zh` 将告警正文显示为简体中文，省略或使用 `--lang en` 时保持英文；机器状态和报告证据字段保持原样。
+- 语义项使用本机 `PATH` 上已安装且受信任的 clangd，实测后端 23.1.0。`cdb` 以 `--root` 为基准，默认 `build-vscode/compile_commands.json`；1.1 与 3.3 需要该文件。没有 CDB 而允许试探的静态项按文件后缀使用固定 C++17 或 C11，并加入 `-I <root>`，不能当成构建配置。CDB 应对应所查快照；每个文件只支持一种配置。工具不执行 CDB 命令，也不使用消费仓 `.clangd`、编译器插件、驱动查询或项目脚本。只接受语言版本、宏定义/撤销、包含目录和受控语法检查选项；调试、诊断、依赖文件和目标文件参数会被安全忽略，未知选项仍报告未覆盖。clangd 的临时配置在系统临时目录（尊重 `TMPDIR`）；不建后台索引。
 - 2.1、2.2 使用 clangd 解析的实际 include；目标与禁止关系来自配置，不从路径名猜测；2.2 不覆盖链接或全局符号依赖。3.4 的 `forbidden` 约束已归属生产目标的函数声明拼写，并不证明 ABI 可见性。T102/T401/T601/T501/T202 的原候选由 `Scan` 复用，词法事实不等于语义判决。
 - 2.4、5.1、5.2、5.3 加 `--baseline <rev>`，且 `--root` 必须为 Git 仓根；历史检查读取 `baseline..HEAD` 的 Git 对象，不读取 index。5.1 复用既有 `retired-symbol` 的新增行协议。要让 AST 和历史证据对应同一版本，用干净的固定提交快照，而不是在有本地修改的工作树混合两类结果。
 - `checks` 和 `counts.by_key` 明列零命中；`not_reported` 只表示该检查支持的形状无命中。`uncovered`、`manual_pending`、`disabled` 和 `coverage.missing_inputs/partial` 都不是干净。JSON 的 `coverage.tus` 列出实际解析的 TU，`index=none` 表示不证明跨 TU 语义。`candidate` 是线索，未运行行为重放；`violation` 只对显式声明的机器可判约束。退出 0 是生成报告且无选中项为 `uncovered`，即使报候选或违规；2 是工具/配置问题或启用项未覆盖。
-- 2.3 保留无法由 AST 解析的 T401 线索及其位置，标记 `CHAIN_UNRESOLVED`；没有 T401 线索时不生成 finding，即使词法范围本身未覆盖完整。1.3、4.3、6.3 的空证据包用 `checks[].reason` 说明为什么没有可交接的证据；实际覆盖不足才报 `CHAIN_PARTIAL` / `FLOW_PARTIAL`，不从空包推断契约缺失。
+- 2.3 保留无法由 AST 解析的 T401 线索及其位置，标记 `CHAIN_UNRESOLVED`；没有 T401 线索时不生成 finding，即使词法范围本身未覆盖完整。1.3、4.3、6.3 的空证据包用 `checks[].reason` 说明为什么没有可交接的证据；实际覆盖不足才报 `CHAIN_PARTIAL` / `FLOW_PARTIAL`，不从空包推断契约缺失。2.3 收紧后的候选只在调用方、包装层与委托目标均可定位时出现；类型标记、所有权、同步与错误转换语义各自排除，不凭单个实现定罪。
+- R1（相似函数）与 R2（复杂度增量）是可选评审线索，不进推荐配置。它们需要 lizard 1.25.0 测量后端（`[design."design.<key>"].lizard_path` 或环境已安装的匹配版本）。配置路径只能指向当前 Python 环境内的 lizard 安装，消费仓不能借配置执行任意 Python 代码；缺失或路径不受信时报 `uncovered/NO_MEASUREMENT_BACKEND`，其余检查结果照常保留。R2 复用 tools/complexity 的测量与基线差量：`--baseline` 下只报新增/恶化，无基线时超阈函数明确标记为存量。R1/R2 的测量不依赖 clangd。
 
 **增添/停用示例。** 在受信任的工具副本中创建 `rules/_design/example.py`。消费仓不能通过配置指定 Python 插件路径：
 

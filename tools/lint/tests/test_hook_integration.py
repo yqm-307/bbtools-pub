@@ -55,16 +55,16 @@ class CommitScopeTest(GitCase):
 
 
 class LevelTest(GitCase):
-    """README §退出码: 'level=block exit 1、level=warn exit 0 且输出 WARN 不输出 PASS'."""
+    """README §退出码: 'level=fatal exit 1、level=warn exit 0 且输出 WARN 不输出 PASS'."""
 
     def setUp(self):
         super().setUp()
         self.put('a.h', 'int kRpcV2New;\n', root=self.repo)
         self.git('add', 'a.h')
 
-    def test_block_level_exit_1(self):
+    def test_fatal_level_exit_1(self):
         self.put('.config/lint.toml',
-                 lint_config(commit=('T501',), rules_extra='[rules.T501]\nlevel = "block"\n'),
+                 lint_config(commit=('T501',), rules_extra='[rules.T501]\nlevel = "fatal"\n'),
                  root=self.repo)
         self.git('add', '.config/lint.toml')
         p = self.commit_hook()

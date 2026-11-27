@@ -56,7 +56,7 @@ class ConfigRejectTest(LintCase):
 
     def test_invalid_level_rejected(self):
         self.assert_reject(config_text(scan=('T101',),
-                                       extra='[rules.T101]\nlevel = "fatal"\n'))
+                                       extra='[rules.T101]\nlevel = "block"\n'))
 
     def test_exclude_needs_all_four_keys(self):
         extra = ('[[exclude]]\nrule = "T501"\npath = "*"\nsymbol = "k*"\n')  # missing reason
