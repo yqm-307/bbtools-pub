@@ -50,10 +50,13 @@ CFG_22_NO_FORBIDDEN = ('[design."2.2".graph]\n'
                        'assembly = ["assemble"]\n')
 
 BAD_23 = {'shell.h': ('struct Impl { static int a() { return 1; } static int b() { return 2; } };\n'
-                      'struct Sh {\n'
+                      'class Sh {\n'
+                      '  friend int caller();\n'
                       '  static int a() { return Impl::a(); }\n'
                       '  static int b() { return Impl::b(); }\n'
-                      '};\n')}
+                      '};\n'),
+          'user.cc': ('#include "shell.h"\n'
+                      'int caller() { return Sh::a() + Sh::b(); }  // 可定位的实际调用方（§2.3 收紧）\n')}
 LEGAL_23 = {
     'gate.h': ('#include <string_view>\n'
                'struct Impl { static int a() { return 1; } static int b() { return 2; } };\n'
@@ -61,8 +64,11 @@ LEGAL_23 = {
                'struct Gate {\n'
                '  static int a(std::string_view tok) { require(tok); return Impl::a(); }  // 权限检查后转发\n'
                '  static int b(std::string_view tok) { require(tok); return Impl::b(); }\n'
-               '};\n'),
+               '};\n'
+               'int gate_user() { return Gate::a("t") + Gate::b("t"); }\n'),
     'shell_bad.h': BAD_23['shell.h'],
+    'user.cc': ('#include "shell_bad.h"\n'
+                'int caller() { return Sh::a() + Sh::b(); }  // 可定位的实际调用方（§2.3 收紧）\n'),
 }
 MISSING_23 = {'macro_shell.h': ('#define FWD(name) static int name() { return Impl::name(); }\n'
                                 'struct Msh { FWD(a) FWD(b) };\n')}

@@ -72,8 +72,8 @@ reason = "bbtools RPC 公开常量属于兼容契约，不是内部迁移名"
 
 # 复制到独立审查配置后取消注释，再以 --design --config 显式传入。
 # [design]
-# rules = ["design.primitive-parameter-pair", "design.resource-release-paths", "design.cross-object-lock", "design.callback-multiple-paths", "design.private-header-boundary", "design.forbidden-target-edge", "design.forwarding-layer", "design.boolean-branch-switch", "design.state-gated-operation", "design.caller-maintains-owner-state", "design.test-seam-in-production", "design.empty-value-on-failure", "design.logging-only-catch", "design.nested-retry-clue", "design.retired-symbol", "design.repeated-declaration", "design.versioned-entry", "design.identical-branch-tokens", "design.comment-restates-code", "design.query-shaped-consumption"]
-# manual = ["design.co-written-fields", "design.group-forwarding", "design.cochanged-mapping", "design.interface-consumers", "design.repeated-validation", "design.legacy-implementation", "design.mixed-operation-body", "design.consecutive-forwarders"]
+# rules = ["design.private-header-boundary", "design.forbidden-target-edge", "design.test-seam-in-production", "design.retired-symbol"]
+# manual = []
 # cdb = "build-vscode/compile_commands.json"
 # [design."design.private-header-boundary"]
 # private = ["runtime/internal/*.h"]
@@ -91,5 +91,17 @@ reason = "bbtools RPC 公开常量属于兼容契约，不是内部迁移名"
 # [design."design.test-seam-in-production".targets]
 # "src/*" = "production"
 # "tests/*" = "tests"
-# [design."design.versioned-entry"]
-# contract_file = "docs/migration.md"
+
+# 可选评审线索（不进推荐规则集）：跨文件相似函数、复杂度增量、收紧的转发层候选。
+# 与上方推荐配置二选一，或把三个键合并进同一个 [design].rules；不要重复 [design] 段。
+# R1/R2 需要 lizard 1.25.0 测量后端，仅启用这两个键时需要；缺失按未覆盖报告。
+# R2 配合 --baseline <rev> 报告新增/恶化，无基线时超阈函数标记为存量。
+# [design]
+# rules = ["design.similar-functions", "design.complexity-delta", "design.forwarding-layer"]
+# manual = []
+# cdb = "build-vscode/compile_commands.json"
+# [design."design.similar-functions"]
+# lizard_path = "/path/to/site-packages"  # 必须位于当前 Python 环境内
+# [design."design.complexity-delta"]
+# lizard_path = "/path/to/site-packages"  # 必须位于当前 Python 环境内
+# config_file = "complexity.toml"   # 可选：复用 tools/complexity 的阈值与范围声明

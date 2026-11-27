@@ -3,7 +3,7 @@ from collections import defaultdict
 import re
 
 from design import Check, quote
-from design_ast import (address, before_comment, body, children, definition_ids, direct_calls,
+from design_ast import (address, before_comment, body, call_ref, children, definition_ids, direct_calls,
                         functions, line, location, reference, source_range, split_if, types, walk)
 
 
@@ -213,9 +213,17 @@ def mixed_responsibilities(ctx, result):
             data = body(fn)
             if not data:
                 continue
-            statement_calls = [(stmt, list(direct_calls(stmt))) for stmt in children(data) if stmt['kind'] != 'Return']
-            sites = [dict(**location(path, call), callee=ref.get('detail')) for stmt, calls in statement_calls for call, ref in calls
-                     if 'range' in call and ref['kind'] == 'DeclRef' and ' Function ' in ref.get('arcana', '')]
+            # A call inside an initializer, a condition or a callback is not a separate
+            # top-level operation. Require two distinct standalone void commands as evidence.
+            sites = []
+            for stmt in children(data):
+                while stmt['kind'] == 'ExprWithCleanups' and len(children(stmt)) == 1:
+                    stmt = children(stmt)[0]
+                ref = call_ref(stmt)
+                if (stmt['kind'] == 'Call' and ref and ref['kind'] == 'DeclRef' and 'range' in stmt
+                        and ' Function ' in ref.get('arcana', '') and types(stmt)[:1] == ['void']
+                        and not ref['detail'].startswith('__builtin_')):
+                    sites.append(dict(**location(path, stmt), callee=ref['detail']))
             if len({s['callee'] for s in sites}) < 2 or not any(s['kind'] == 'Decl' for s in children(data)):
                 continue
             reasons = []

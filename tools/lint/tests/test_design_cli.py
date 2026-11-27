@@ -3,7 +3,9 @@
 T3 未实现 ``--design`` 前，本模块除「默认模式不变」外全部红测，
 消息前缀 ``[DESIGN-ENTRY-MISSING]``；这是预期红，不是夹具缺陷。
 """
+import json
 import re
+import sys
 import unittest
 
 from _support import LintCase, config_text
@@ -60,6 +62,58 @@ class DesignReportShape(DesignCase):
         self.assertEqual(len(rows), 2, '两个坏例各一条')
         self.assertEqual([r['file'] for r in rows], ['a.cc', 'z.cc'],
                          '按 file 升序（§4.3）')
+
+    def test_cmake_compile_database_flags_are_accepted(self):
+        """A normal CMake compile_commands entry keeps design AST usable."""
+        root = self.put_tree(BAD_61)
+        self.put_design_config(rules=('6.1',), cdb=True, root=root)
+        source = root / 'dup.cc'
+        self.put('build-vscode/compile_commands.json', json.dumps([{
+            'directory': str(root),
+            'command': (
+                f'c++ -g -Wall -Wextra -Wpedantic -Werror -fPIC -pthread '
+                f'-std=c++17 -I{root} -isystem /usr/include -o dup.o -c {source}'
+            ),
+            'file': str(source),
+        }]), root=root)
+        p, report = self.design_report(ctx='cmake-cdb', keys=('6.1',), root=root)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.expect_status(report, '6.1', 'candidate', 'cmake-cdb/6.1')
+
+    def test_c_compile_database_preserves_language(self):
+        """CDB ``-x c`` must survive sanitization instead of becoming C++."""
+        root = self.put_tree({'probe.c': (
+            '#ifdef __PIC__\n'
+            '#error expected -fno-PIC to be preserved\n'
+            '#endif\n'
+            'int f(int x) {\n'
+            '  int kind = _Generic(x, int: 1, default: 0);\n'
+            '  if (x > 0) { x = 1; } else { x = 1; }\n'
+            '  return x + kind;\n'
+            '}\n')})
+        self.put_design_config(rules=('6.1',), cdb=True, root=root)
+        source = root / 'probe.c'
+        self.put('build-vscode/compile_commands.json', json.dumps([{
+            'directory': str(root),
+            'command': f'cc -x c -std=c11 -fPIC -fno-PIC -c {source} -o probe.o',
+            'file': str(source),
+        }]), root=root)
+        p, report = self.design_report(ctx='c-language-cdb', keys=('6.1',), root=root)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.expect_status(report, '6.1', 'candidate', 'c-language-cdb/6.1')
+
+    def test_c_source_without_compile_database_uses_c_standard(self):
+        """Static fallback must use a C standard for ``.c`` sources."""
+        root = self.put_tree({'probe.c': (
+            'int f(int x) {\n'
+            '  int kind = _Generic(x, int: 1, default: 0);\n'
+            '  if (x > 0) { x = 1; } else { x = 1; }\n'
+            '  return x + kind;\n'
+            '}\n')})
+        self.put_design_config(rules=('6.1',), root=root)
+        p, report = self.design_report(ctx='c-language-fallback', keys=('6.1',), root=root)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.expect_status(report, '6.1', 'candidate', 'c-language-fallback/6.1')
 
     def test_zero_hit_keys_still_listed(self):
         """§4.5 全局：零命中键必须出现在 checks[]，不能从告警数倒推覆盖。"""
@@ -186,6 +240,82 @@ class DesignExitCodes(DesignCase):
         match = re.match(r'^(\S+):(\d+) (design\.comment-restates-code) (\w+) (\S+) (.+)$', rows[0])
         self.assertIsNotNone(match, f'§4.1 文本行五段式，得 {rows[0]!r}')
         self.assertEqual(match.group(4).lower(), 'candidate', '状态与 JSON 一致')
+
+
+class DesignDiagnosticFormat(DesignCase):
+    """--design 人读 diagnostic 契约：未传 --format 默认 diagnostic，显式同输出。
+
+    文本行形状、默认/显式一致性、缺覆盖口径各自只在本类冻结；
+    JSON 报告形状仍由 DesignReportShape 承接，互不重叠。
+    """
+
+    def diagnostic_run(self, keys=(), root=None, fmt=None):
+        """与 design_run 同参，但 fmt=None 时完全不传 --format（测默认值）。"""
+        args = [sys.executable, '-I', str(self.tools / 'lint/lint.py'),
+                '--root', str(root or self.root),
+                '--config', str((root or self.root) / '.config/lint.toml'),
+                '--design']
+        for key in keys:
+            args += ['--check', key]
+        if fmt is not None:
+            args += ['--format', fmt]
+        return self.run_cmd(*args)
+
+    def test_default_format_is_diagnostic_shape(self):
+        """--design 未传 --format：stdout 为带源码帧的 diagnostic 人读输出。"""
+        root = self.put_tree(BAD_64)
+        self.put_design_config(rules=('6.4',), root=root)
+        p = self.diagnostic_run(keys=('6.4',), root=root)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        lines = p.stdout.splitlines()
+        self.assertTrue(any(l.startswith('设计检查：') for l in lines), '缺少检查概要头')
+        self.assertTrue(any(l.startswith('覆盖：完整') for l in lines),
+                        '缺少覆盖概要，且干净场景应明确完整')
+
+        head = next((l for l in lines if 'design.comment-restates-code' in l), '')
+        match = re.match(r'^(a\.h):(\d+): (候选) \[(design\.comment-restates-code)\] (\S+)$', head)
+        self.assertIsNotNone(match, f'finding 行应为 file:line: 状态 [design键] 符号，得 {head!r}')
+        self.assertEqual(match.group(5), 'limit', '符号为原 finding 的 target_symbol')
+        idx = lines.index(head)
+        reason = lines[idx + 1] if idx + 1 < len(lines) else ''
+        self.assertRegex(reason, r'^  \S', '命中行下一行应为缩进两列的原因说明（可为中文）')
+        self.assertTrue(any(re.match(r'^> 1 \| /\* 数量。 \*/', l) for l in lines),
+                        '源码帧应用 > 标记命中行并给出真实源码行')
+        self.assertTrue(any(re.match(r'^  2 \| int limit\{0\};', l) for l in lines),
+                        '非命中行无 > 标记，行号左空格宽度随最大行号浮动')
+        self.assertNotIn('{', lines[0], 'diagnostic 不得混入 JSON 报告')
+
+    def test_explicit_diagnostic_matches_default(self):
+        """显式 --format diagnostic 与默认输出逐字节一致（含退出码）。"""
+        root = self.put_tree(BAD_64)
+        self.put_design_config(rules=('6.4',), root=root)
+        default = self.diagnostic_run(keys=('6.4',), root=root)
+        explicit = self.diagnostic_run(keys=('6.4',), root=root, fmt='diagnostic')
+        self.assertEqual(default.returncode, explicit.returncode)
+        self.assertEqual(default.stdout, explicit.stdout,
+                         '默认与显式 diagnostic 同一渲染路径，输出必须一致')
+
+    def test_no_candidate_uncovered_exit2_not_clean(self):
+        """零命中且存在 uncovered：exit 2 且标识未覆盖，不得称干净。"""
+        root = self.put_tree(BAD_21_FILES)
+        self.put_design_config(rules=('2.1',), root=root)  # 无 2.1 边界声明输入
+        p = self.diagnostic_run(keys=('2.1',), root=root)
+        self.assertEqual(p.returncode, 2, 'uncovered 即使零命中也必须 exit 2（与 JSON 一致）')
+        self.assertNotRegex(p.stdout, r'覆盖：完整', '零命中不代表干净（§0.4）')
+        self.assertIn('覆盖：不完整', p.stdout, '覆盖概要须标识不完整')
+        self.assertIn('[design.private-header-boundary]', p.stdout, '须点名未覆盖的检查键')
+        self.assertIn('NO_BOUNDARY_DECL', p.stdout, '须给出缺输入代码，供人工补齐')
+
+    def test_diagnostic_without_design_rejected(self):
+        """--format diagnostic 是 --design 专属人读格式，普通扫描误用应报错退出。"""
+        root = self.put_tree(BAD_64)
+        self.put_design_config(rules=('6.4',), root=root)
+        args = [sys.executable, '-I', str(self.tools / 'lint/lint.py'),
+                '--root', str(root), '--config', str(root / '.config/lint.toml'),
+                '--format', 'diagnostic']
+        p = self.run_cmd(*args)
+        self.assertNotEqual(p.returncode, 0, 'diagnostic 不属于普通 lint 输出格式')
+        self.assertTrue(p.stderr.strip(), '误用须有 stderr 说明')
 
 
 class DesignDeterminism(DesignCase):

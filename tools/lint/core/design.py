@@ -14,6 +14,7 @@ import tomllib
 from configuration import string_list, validate
 from cpp import EXTENSIONS
 from design_ast import analyze
+import design_zh
 from scan import Scan
 
 
@@ -287,8 +288,15 @@ def run(root, path, args):
                                 manual_pending=manual, disabled=disabled),
                   counts=dict(by_key={row['key']: hits[row['key']] for row in summaries if row['enabled']},
                               by_status=dict(sorted(statuses.items()))))
+    chinese = args.lang == 'zh'
+    if chinese:
+        for f in findings:
+            f['message'] = design_zh.finding_message(f)
     if args.format == 'json':
         print(json.dumps(report, ensure_ascii=False, indent=2))
+    elif args.format == 'diagnostic':
+        from design_diagnostic import print_diagnostics
+        print_diagnostics(report, ctx)
     else:
         for f in findings:
             print(f"{f['file']}:{f['line']} {f['key']} {f['status'].upper()} {f['symbol']} {f['message']}")

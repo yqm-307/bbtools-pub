@@ -71,49 +71,121 @@ class AstError(ValueError):
     pass
 
 
+# Kept verbatim: they change what the parse means, so dropping them would analyze the
+# wrong source, and none of them executes anything or redirects output in a syntax-only run.
+# The -std pattern covers both C and C++ spellings (c11, gnu17, c++20, gnu++2b, ...).
+KEEP_ARGUMENTS = re.compile(
+    r'(?:-std=(?:gnu|c)(?:\+\+)?(?:89|90|98|99|03|11|14|17|20|23|26|2a|2b|2c|2x)'
+    r'|-[DU][A-Za-z_]\w*(?:=[^\x00\r\n]*)?'
+    r'|-O(?:[0123gsz]|fast)?|-pthread'
+    r'|-f(?:no-)?(?:pic|PIC|pie|PIE)'
+    r'|-f(?:no-)?(?:exceptions|rtti)'
+    r'|-f(?:no-)?(?:signed-char|unsigned-char|signed-bitfields|short-enums|short-wchar))\Z')
+
+# Diagnostic and warning switches never change what the parse means; CMake emits them
+# wholesale. Unknown -W/-f(diagnostic|debug|color|report|record) spellings are dropped
+# here on purpose: anything outside these families still falls to default-deny below.
+IGNORED = re.compile(
+    r'(?:-W[^\x00\r\n]*'
+    r'|-w'
+    r'|-g[0123]?'
+    r'|-f(?:diagnostics|diagnostic|debug|color|report|record|verbose-asm)[^\x00\r\n]*'
+    r'|-MD|-MMD|-MP)\Z')
+
+# Output/dependency-file targets consume one value; the value is validated and discarded,
+# never forwarded, so a syntax-only run cannot produce file side effects.
+PAIRED_IGNORED = frozenset({'-o', '-MF', '-MT', '-MQ'})
+
+SOURCE_LANGUAGES = frozenset({'c', 'c++', 'c-header', 'c++-header'})
+
+
+def rebuild_args(directory, path, args):
+    """Rebuild a syntax-only argv. Never execute the driver or forward output paths."""
+    safe = ['/usr/bin/c++', '-fsyntax-only']
+    language = None
+    args = iter(args)
+    for arg in args:
+        if arg in ('-I', '-isystem', '-iquote') or (arg.startswith('-I') and len(arg) > 2):
+            flag, value = (arg, next(args, '')) if arg in ('-I', '-isystem', '-iquote') else ('-I', arg[2:])
+            if not value or value.startswith(('-', '@')):
+                raise AstError(f'invalid include directory {arg!r}')
+            safe.extend((flag, str((directory / value).resolve())))
+        elif arg == '-x':
+            value = next(args, '')
+            if value not in SOURCE_LANGUAGES:
+                raise AstError(f'unsupported source language {value!r}')
+            language = value
+        elif arg.startswith('-Wp,'):
+            forwarded = arg[4:].split(',')
+            if not forwarded or not all(re.fullmatch(r'-[DU][A-Za-z_]\w*(?:=[^\x00\r\n]*)?', value)
+                                        for value in forwarded):
+                raise AstError(f'unsupported preprocessor forwarding option {arg!r}')
+            safe.append(arg)
+        elif arg in PAIRED_IGNORED:
+            value = next(args, '')
+            if not value or value.startswith(('-', '@')):
+                raise AstError(f'invalid value after {arg}')
+        elif IGNORED.fullmatch(arg):
+            continue
+        elif KEEP_ARGUMENTS.fullmatch(arg):
+            safe.append(arg)
+        elif arg in ('-c', '-fsyntax-only') or (not arg.startswith(('-', '@')) and (directory / arg).resolve() == path):
+            continue
+        else:
+            raise AstError(f'unsupported CDB option {arg!r}')
+    language = language or ('c' if path.suffix == '.c' else 'c++')
+    safe.extend(('-x', language))
+    return safe
+
+
 def commands(root, cdb, paths):
     if cdb is None:
-        entries = [{'directory': str(root), 'file': path,
-                    'arguments': ['c++', '-std=c++17', '-I', str(root), path]}
-                   for path in paths]
+        entries = []
+        for path in paths:
+            language = 'c' if Path(path).suffix == '.c' else 'c++'
+            standard = '-std=c11' if language == 'c' else '-std=c++17'
+            entries.append({'directory': str(root), 'file': path,
+                            'arguments': ['c++', standard, '-I', str(root), path]})
     else:
         entries = json.loads(cdb.read_text(encoding='utf-8'))
     if not isinstance(entries, list):
         raise AstError('CDB must be an array')
     selected = {}
+    skipped = {}
     allowed = set(paths)
     for entry in entries:
-        directory = Path(entry['directory']).resolve(strict=True)
-        path = (directory / entry['file']).resolve(strict=True)
+        directory = Path(entry['directory']).resolve()
+        path = (directory / entry['file']).resolve()
         if not path.is_relative_to(root) or path.relative_to(root).as_posix() not in allowed:
             continue
         relative = path.relative_to(root).as_posix()
-        args = entry.get('arguments')
-        if args is None:
-            args = shlex.split(entry['command'])
-        if not isinstance(args, list) or not args or any(not isinstance(a, str) for a in args):
-            raise AstError(f'{relative}: invalid CDB arguments')
-        # Rebuild the invocation; never allow response files, plugins, drivers, config
-        # files, arbitrary Clang options, output paths or environment assignments.
-        safe = ['/usr/bin/c++', '-fsyntax-only', '-x', 'c++']
-        args = iter(args[1:])
-        for arg in args:
-            if arg in ('-I', '-isystem', '-iquote') or (arg.startswith('-I') and len(arg) > 2):
-                flag, value = (arg, next(args, '')) if arg in ('-I', '-isystem', '-iquote') else ('-I', arg[2:])
-                if not value or value.startswith(('-', '@')):
-                    raise AstError(f'{relative}: invalid include directory')
-                safe.extend((flag, str((directory / value).resolve())))
-            elif arg in ('-c', '-fsyntax-only') or (not arg.startswith(('-', '@')) and (directory / arg).resolve() == path):
-                continue
-            elif re.fullmatch(r'-std=(?:gnu|c)\+\+(?:98|03|11|14|17|20|23|26|2a|2b|2c)|-[DU][A-Za-z_]\w*(?:=[^\x00\r\n]*)?', arg):
-                safe.append(arg)
+        if relative in skipped:
+            continue
+        try:
+            if not directory.is_dir():
+                raise AstError('CDB working directory does not exist')
+            if 'arguments' in entry:
+                args = entry['arguments']
+            elif isinstance(entry.get('command'), str):
+                args = shlex.split(entry['command'])
             else:
-                raise AstError(f'{relative}: unsupported CDB option {arg!r}')
+                args = None
+            if not isinstance(args, list) or not args or any(not isinstance(a, str) or '\x00' in a for a in args):
+                raise AstError('invalid CDB arguments')
+            safe = rebuild_args(directory, path, args[1:])
+        except (ValueError, OSError) as error:
+            selected.pop(relative, None)
+            skipped[relative] = str(error)
+            continue
         command = {'directory': str(root), 'file': str(path), 'arguments': [*safe, str(path)]}
         if relative in selected and selected[relative] != command:
-            raise AstError(f'{relative}: multiple build configurations')
+            del selected[relative]
+            skipped[relative] = 'multiple build configurations'
+            continue
         selected[relative] = command
-    return selected
+    # Files missing from the CDB deliberately get no fabricated configuration: parsing
+    # them under guessed flags would manufacture coverage, so they stay partial instead.
+    return selected, skipped
 
 
 class Clangd:
@@ -175,9 +247,13 @@ def analyze(root, cdb, sources, timeout):
     binary = shutil.which('clangd', path=path_env)
     if not binary or Path(binary).resolve().is_relative_to(root):
         raise AstError('trusted clangd outside --root is not on absolute PATH entries')
-    selected = commands(root, cdb, sources)
-    if not selected:
+    selected, skipped = commands(root, cdb, sources)
+    if not selected and not skipped:
         raise AstError('no CDB entries for selected source files')
+    for path in sorted(skipped):
+        yield path, None, [skipped[path]], []
+    if not selected:
+        return
     with tempfile.TemporaryDirectory(prefix='lint-ast-') as scratch:
         (Path(scratch) / 'compile_commands.json').write_text(json.dumps(list(selected.values())), encoding='utf-8')
         with subprocess.Popen([str(Path(binary).resolve()), f'--compile-commands-dir={scratch}',

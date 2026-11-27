@@ -142,6 +142,90 @@ MISSING_15 = {
                  'using Mu = LOCK_ALIAS;  // 锁别名经宏，不可解析\n'
                  'void f(Obj& o) { std::lock_guard<Mu> g(o.mu_); }\n'),
 }
+DUPLICATE_15 = {
+    'duplicate.cc': ('#include <mutex>\n'
+                     'struct Obj { std::mutex mu_; };\n'
+                     'void first(Obj& o) { std::lock_guard<std::mutex> g(o.mu_); }\n'
+                     'void second(Obj& o) { std::lock_guard<std::mutex> g(o.mu_); }\n'),
+}
+SELF_ALIAS_15 = {
+    'self.cc': ('#include <memory>\n#include <mutex>\n'
+                'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                '  std::mutex mu_;\n'
+                '  void lock_self() {\n'
+                '    auto self = shared_from_this();\n'
+                '    std::lock_guard<std::mutex> g(self->mu_);\n'
+                '  }\n'
+                '};\n'),
+}
+SELF_ALIAS_REBOUND_15 = {
+    'rebound.cc': ('#include <memory>\n#include <mutex>\n'
+                   'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                   '  std::mutex mu_;\n'
+                   '  void lock_other(std::shared_ptr<Obj> other) {\n'
+                   '    auto self = shared_from_this();\n'
+                   '    self = other;\n'
+                   '    std::lock_guard<std::mutex> g(self->mu_);\n'
+                   '  }\n'
+                   '};\n'),
+}
+SELF_ALIAS_SAME_LINE_15 = {
+    'same_line.cc': ('#include <memory>\n#include <mutex>\n'
+                     'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                     '  std::mutex mu_;\n'
+                     '  void lock_self() { auto self = shared_from_this(); '
+                     'std::lock_guard<std::mutex> g(self->mu_); }\n'
+                     '};\n'),
+}
+MULTIPLE_RECEIVERS_15 = {
+    'multiple.cc': ('#include <memory>\n#include <mutex>\n'
+                    'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                    '  int flag_;\n'
+                    '  std::mutex mu_;\n'
+                    '  void lock_other(std::shared_ptr<Obj> other) {\n'
+                    '    auto self = shared_from_this();\n'
+                    '    auto value = self->flag_; std::lock_guard<std::mutex> g(other->mu_);\n'
+                    '  }\n'
+                    '};\n'),
+}
+SHADOWED_EXTERNAL_15 = {
+    'shadowed.cc': ('#include <memory>\n#include <mutex>\n'
+                    'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                    '  std::mutex mu_;\n'
+                    '  void lock_external(std::shared_ptr<Obj> self) {\n'
+                    '    { auto self = shared_from_this(); }\n'
+                    '    std::lock_guard<std::mutex> g(self->mu_);\n'
+                    '  }\n'
+                    '};\n'),
+}
+MIXED_SELF_EXTERNAL_15 = {
+    'mixed.cc': ('#include <memory>\n#include <mutex>\n'
+                 '\n'
+                 'struct Obj : std::enable_shared_from_this<Obj> {\n'
+                 '  std::mutex mu_;\n'
+                 '};\n'
+                 '\n'
+                 'struct Peer : std::enable_shared_from_this<Peer> {\n'
+                 '  std::mutex mu_;\n'
+                 '  std::shared_ptr<Obj> peer_;\n'
+                 '  void lock_foreign_via_member() {\n'
+                 '    auto peer = this->peer_;  // 成员 shared_ptr 的局部副本\n'
+                 '    std::lock_guard<std::mutex> a(this->peer_->mu_);\n'
+                 '    std::lock_guard<std::mutex> b(peer->mu_);\n'
+                 '  }\n'
+                 '  void lock_foreign_via_alien(std::shared_ptr<Obj> other) {\n'
+                 '    auto alien = other->shared_from_this();  // other 上的 shared_from_this\n'
+                 '    std::lock_guard<std::mutex> c(alien->mu_);\n'
+                 '  }\n'
+                 '  void lock_own_this() {\n'
+                 '    std::lock_guard<std::mutex> s(this->mu_);\n'
+                 '  }\n'
+                 '  void lock_own_alias() {\n'
+                 '    auto self = shared_from_this();\n'
+                 '    std::lock_guard<std::mutex> t(self->mu_);\n'
+                 '  }\n'
+                 '};\n'),
+}
 # 1.6 取消与完成各自兑现一次回调（行为）。
 BAD_16 = {
     'job.cc': ('#include <functional>\n'
@@ -381,6 +465,68 @@ class CrossObjectLock(DesignCase):
         self.assertEqual(p.returncode, 2)
         self.expect_status(rep, '1.5', 'uncovered', 'LOCK/1.5')
         self.expect_missing_code(rep, '1.5', 'LOCK_UNRESOLVED', 'LOCK/1.5')
+
+    def test_same_lock_is_aggregated(self):
+        p, rep, _ = self.one('1.5', DUPLICATE_15)
+        rows = self.findings_for(rep, '1.5')
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(len(rows), 1, '同一锁声明只保留一个候选')
+        self.assertEqual(len(rows[0]['facts']['external_access']), 2, '保留全部访问点')
+
+    def test_shared_from_this_alias_is_not_external(self):
+        p, rep, _ = self.one('1.5', SELF_ALIAS_15)
+        self.assertEqual(p.returncode, 0)
+        self.assertFalse(self.findings_for(rep, '1.5'), 'owner 自身别名持有的锁不算跨对象锁')
+
+    def test_shared_from_this_alias_rebound_to_external_is_reported(self):
+        p, rep, _ = self.one('1.5', SELF_ALIAS_REBOUND_15)
+        self.assertEqual(p.returncode, 0)
+        self.assertTrue(self.findings_for(rep, '1.5'), '自身别名重绑定到外部对象后应保留候选')
+
+    def test_shared_from_this_alias_on_same_line_is_not_external(self):
+        p, rep, _ = self.one('1.5', SELF_ALIAS_SAME_LINE_15)
+        self.assertEqual(p.returncode, 0)
+        self.assertFalse(self.findings_for(rep, '1.5'), '同行建立的自身别名持锁不算跨对象锁')
+
+    def test_lock_receiver_comes_from_matching_ast_member(self):
+        p, rep, _ = self.one('1.5', MULTIPLE_RECEIVERS_15)
+        self.assertEqual(p.returncode, 0)
+        self.assertTrue(self.findings_for(rep, '1.5'), '同一行多个 -> 时应按锁成员节点取 receiver')
+
+    def test_inner_self_alias_does_not_hide_outer_external_lock(self):
+        p, rep, _ = self.one('1.5', SHADOWED_EXTERNAL_15)
+        self.assertEqual(p.returncode, 0)
+        self.assertTrue(self.findings_for(rep, '1.5'), '内层同名自身别名不能隐藏外层外部锁')
+
+    def test_mixed_tu_aggregates_only_external_sites_per_lock_decl(self):
+        """同一 TU：真正自身（this / shared_from_this）不产生访问点；成员
+        shared_ptr 的局部副本、this->peer_->mu_、other 上 shared_from_this
+        得到的对象都报，并按锁声明聚合进同一 finding 的 external_access。"""
+        p, rep, _ = self.one('1.5', MIXED_SELF_EXTERNAL_15)
+        self.assertEqual(p.returncode, 0)
+        text = MIXED_SELF_EXTERNAL_15['mixed.cc'].splitlines()
+
+        def site(fragment):
+            return next(i for i, value in enumerate(text, 1) if fragment in value)
+
+        external = [site('a(this->peer_->mu_)'), site('b(peer->mu_)'), site('c(alien->mu_)')]
+        own = [site('s(this->mu_)'), site('t(self->mu_)')]
+        self.expect_status(rep, '1.5', 'candidate', 'mixed/1.5')
+        row = self.one_finding(rep, '1.5', 'mixed/1.5')
+        self.assertEqual(row['file'], 'mixed.cc', 'finding 相对 --root（§4.3）')
+        facts = self.expect_facts(row, '1.5', 'mixed/1.5')
+        self.assertEqual(facts['lock_decl']['owner'], 'Obj',
+                         '只聚合外部锁声明 Obj::mu_；Peer::mu_ 全为自身访问不设候选')
+        access = facts['external_access']
+        self.assertEqual([a['line'] for a in access], external,
+                         f'external_access 逐点保留三种外部形态（行 {external}），'
+                         f'自身两处（行 {own}）不得进入访问点')
+        self.assertIn('this->peer_->mu_', access[0]['expression'], '成员链直达锁的表达式入访问点')
+        self.assertIn('peer->mu_', access[1]['expression'], '成员 shared_ptr 局部副本的访问点保留')
+        self.assertIn('alien->mu_', access[2]['expression'], 'other 上的 shared_from_this 得到的对象仍报')
+        self.assertIn('lock_foreign_via_member', access[0]['enclosing'], '访问点归属实际所在函数')
+        self.assertIn('lock_foreign_via_member', access[1]['enclosing'], '访问点归属实际所在函数')
+        self.assertIn('lock_foreign_via_alien', access[2]['enclosing'], '访问点归属实际所在函数')
 
 
 class CallbackOnce(DesignCase):
