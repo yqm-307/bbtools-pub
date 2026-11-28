@@ -7,25 +7,12 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-from xml.etree import ElementTree
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from cpp_format import format_source
 
 
 CPP_EXTENSIONS = {'.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx', '.inl', '.ipp'}
-
-
-def clang_format(command, path, source):
-    output = subprocess.check_output([*command, f'--assume-filename={path}'], input=source)
-    # Unlike formatted stdout, replacement XML distinguishes ignored paths from clean files.
-    if not output:
-        return None
-    replacements = ElementTree.fromstring(output)
-    parts, cursor = [], 0
-    for replacement in replacements:
-        offset = int(replacement.attrib['offset'])
-        parts.extend((source[cursor:offset], (replacement.text or '').encode()))
-        cursor = offset + int(replacement.attrib['length'])
-    parts.append(source[cursor:])
-    return b''.join(parts)
 
 
 def main():
@@ -49,7 +36,6 @@ def main():
     reported = re.search(r'\bclang-format version (\S+)', version)
     if not reported or reported[1] != wanted:
         parser.error(f'need clang-format {wanted}; got {version}')
-    fmt = [binary, '--style=file', '--Werror', '--output-replacements-xml']
 
     def paths(*args):
         data = subprocess.check_output(['git', *args, '-z'])
@@ -84,15 +70,9 @@ def main():
                     raise ValueError(f'{path}: tracked file is missing from the worktree')
                 continue
             source = path.read_bytes()
-        formatted = clang_format(fmt, path, source)
+        formatted = format_source(binary, path, source)
         if formatted is None:
             continue
-        if formatted != source:
-            # Nested lambdas can reflow again after their surrounding call is formatted.
-            second = clang_format(fmt, path, formatted)
-            if second != formatted and clang_format(fmt, path, second) != second:
-                raise ValueError(f'{path}: clang-format did not stabilize after two passes')
-            formatted = second
         checked += 1
         if formatted != source:
             if args.check:
@@ -110,5 +90,5 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (OSError, subprocess.CalledProcessError, ElementTree.ParseError, ValueError) as error:
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
         sys.exit(f'format-cpp: {error}')

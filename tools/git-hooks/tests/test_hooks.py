@@ -21,6 +21,8 @@ class HooksTest(unittest.TestCase):
         self.tools = self.root / 'tools/git-hooks'
         shutil.copytree(SOURCE, self.tools, ignore=shutil.ignore_patterns('__pycache__', 'tests'))
         shutil.copytree(SOURCE.parent / 'lint', self.tools.parent / 'lint', ignore=shutil.ignore_patterns('__pycache__'))
+        shutil.copytree(SOURCE.parent / 'format', self.tools.parent / 'format',
+                        ignore=shutil.ignore_patterns('__pycache__', 'tests'))
         self.env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
         for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR'):
             self.env.pop(key, None)
@@ -267,13 +269,18 @@ class HooksTest(unittest.TestCase):
             import runner
         finally:
             sys.path.remove(str(SOURCE / 'core'))
-        count = 0
+        names = set()
         for rule in runner.RULES.iterdir():
             if rule.is_dir() and not rule.name.startswith('_'):
                 meta = runner.load_meta('push', rule.name)
                 self.assertTrue((SOURCE.parents[1] / meta['docs']).is_file(), meta['docs'])
-                count += 1
-        self.assertEqual(count, 24)
+                names.add(rule.name)
+        canonical = {'T000', 'T101', 'T102', 'T201', 'T202', 'T301', 'T302', 'T303', 'T304',
+                     'T401', 'T501', 'T601', 'comment-form', 'coroutine-sugar', 'format', 'func-naming',
+                     'header-implementation', 'llm-review', 'new-root', 'retired-symbol', 'review-ticket',
+                     'secrets', 'template-layout', 'third-party-layout', 'whitespace'}
+        self.assertLessEqual(canonical, names, '存量规则缺失：目录被删除或改名时须同步本测试')
+        self.assertLessEqual(names, canonical | {'nested-type-alias'}, '新增规则须在此登记并附 meta/docs')
         runner.HOME = SOURCE  # the template must itself be a loadable skeleton
         template = runner.tomllib.loads((SOURCE.parent / 'lint/rules/_template/meta.toml').read_text())
         self.assertEqual(set(template), runner.META_KEYS)
