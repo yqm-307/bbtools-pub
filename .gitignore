@@ -1,0 +1,4 @@
+# Python 字节码缓存（tools/ 下的 hooks、lint、格式化脚本运行时生成）。本仓作为
+# submodule 被消费时，不忽略会让消费仓的 submodule 一直显示有改动。
+__pycache__/
+*.py[cod]
