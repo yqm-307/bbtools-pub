@@ -22,6 +22,8 @@
 | 常量 | 新的文件作用域常量用 `kName`；局部 `const` 变量（如 `const int retry_count`）不必用 `k` |
 | 枚举值 | 跟所在文件既有风格（如 `CO_RUNNING`、`COMUTEX_FREE`）；新的独立模块可用 `kName`，同一文件不混用 |
 
+函数名的动词约定（动词+对象、简单词、不口语）见 `third-party/bbt-agent-toolkit/standards/general/naming.md` 的「函数命名」一节；可选的机器扫描用 `tools/lint` 的 `func-naming` 规则（默认关闭）。
+
 存量风格与新代码冲突时，不借一次改动重命名全仓。
 
 ## 3 错误返回
