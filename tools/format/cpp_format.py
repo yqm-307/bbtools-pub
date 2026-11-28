@@ -1,7 +1,11 @@
 """Canonical clang-format output for both the working tree and immutable Git blobs."""
+import os
 import re
 import subprocess
 from bisect import bisect_left
+from glob import escape
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
 from coroutine_spacing import outside_ranges, spacing_plan
@@ -84,7 +88,42 @@ def _wrap_qualifiers(binary, path, source):
     return _apply(source, accepted)
 
 
+def _is_ignored_without_worktree_file(binary, path):
+    path = Path(path).absolute()
+    for parent in path.parents:
+        config = parent / '.clang-format-ignore'
+        if config.is_file():
+            break
+    else:
+        return False
+
+    # clang-format only matches ignore rules for existing files. Give it a
+    # placeholder outside the worktree; the actual source still comes from Git.
+    with TemporaryDirectory(prefix='format-cpp-') as tmp:
+        mirror = Path(tmp).resolve()
+        probe = mirror / path.relative_to(path.anchor)
+        probe.parent.mkdir(parents=True)
+        probe.touch()
+        prefix = escape(os.fsencode(mirror))
+        rules = []
+        for line in config.read_bytes().split(b'\n'):
+            rule = line.strip()
+            if not rule or rule.startswith(b'#'):
+                continue
+            negated = rule.startswith(b'!')
+            pattern = rule[1:].lstrip() if negated else rule
+            if pattern:
+                if not pattern.startswith(b'/'):
+                    pattern = os.path.normpath(os.path.join(os.fsencode(config.parent), pattern))
+                rules.append((b'!' if negated else b'') + prefix + pattern)
+        (mirror / '.clang-format-ignore').write_bytes(b'\n'.join(rules))
+        return bool(subprocess.check_output([binary, '--list-ignored', '--', str(probe)]))
+
+
 def format_source(binary, path, source):
+    # Git blobs may have no worktree copy, so ignore rules need an explicit probe.
+    if not Path(path).is_file() and _is_ignored_without_worktree_file(binary, path):
+        return None
     current = source
     for _ in range(3):
         edits = _replacements(binary, path, current, 'file')
