@@ -1,0 +1,7 @@
+id = "nested-type-alias"
+interface = "cpp"
+kind = "auto"
+default_enabled = true
+title = "深层模板类型未使用业务别名"
+fix = "给内层组合取业务别名，在使用处保留外层所有权和传参方式"
+docs = "docs/cpp/naming-and-types.md"

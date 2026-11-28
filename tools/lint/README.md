@@ -188,6 +188,7 @@ Git 专用脚本通过返回 0；违规退出 1，并在 stdout 输出一个 JSO
 | T401 | 无字段类的全部操作都是 static 单调用内联定义，至少 `forwarders = 2`；不判断 ABI 或适配价值 |
 | T501 | 标识符含大写 V 加数字；不查字符串、注释、数字值，不自动改名 |
 | T601 | 生产范围标识符含 ForTest/TestAccess/for_test/test_inject；不追踪匿名测试全局状态 |
+| `nested-type-alias` | 普通扫描默认启用；显式配置 `[scan].rules` 时仅运行列出的规则。筛查普通声明里显式写出的深层模板类型，不展开别名，不检查 `using`/`typedef` 的定义。见[类型别名：命名与评审](../../docs/cpp/naming-and-types.md#类型别名命名与评审)。这是词法候选，不解析复杂声明、模板表达式或宏，也不代替人判断名字。 |
 | `coroutine-sugar` | 按标识符筛查协程低层调用（Scheduler、Coroutine、同步原语、async 内部接口）候选；默认关闭，严格仓库显式启用；例外写法见 [协程语法糖](../../docs/cpp/coroutine.md#3-用-lint-固化语法糖边界) |
 || `func-naming` | 函数命名人工复核候选：首词不在允许动词表、复杂词可换简单词、口语/占位词、词数超过 `max_words = 6` 四类；豁免构造/析构、运算符、main、全大写宏调用、override/final 与标准库兼容接口名（比较不分大小写，`Size`/`PushBack`/`owns_lock` 同款放行）；单词惯用名（`size`、`count`、`close`、`ready` 等只有一个词就能达意的访问器/状态词）与 `As`/`From`/`To` 开头的转换函数不报首词；默认关闭，加入 `[scan].rules` 或 hook 阶段 rules 启用；词表在 `rules/func-naming/main.py` 维护，语义正文见 `third-party/bbt-agent-toolkit/standards/general/naming.md`「函数命名」一节 |
 
