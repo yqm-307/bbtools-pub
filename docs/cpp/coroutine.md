@@ -18,9 +18,15 @@
 
 使用时的陷阱同样以那份手册为准（例如 `bbtco_yield` 自带结尾分号，不能写在无花括号的 `if ... else` 里）。写注释或文档引用宏的行为前，先核对头文件当前内容，不凭印象。
 
-正例：`bbtco_noexcept(&ok) [lease] { ... };` 一眼读出“启动协程并检查注册结果”；需要 128 KiB 栈时直接调用带栈大小的重载，旁边写“语法糖暂无栈大小入口，见已知缺口”。
+正例：`bbtco_noexcept(&ok) [lease]() { ... };` 一眼读出“启动协程并检查注册结果”；需要 128 KiB 栈时直接调用带栈大小的重载，旁边写“语法糖暂无栈大小入口，见已知缺口”。
 
 反例：同一个仓里同一种意图一处写 `bbtco`，一处写 `g_scheduler->RegistCoroutineTask(...)`，又没有说明原因，读者无法判断两种写法是否有语义差别；或者为了避开缺口去读 Scheduler 内部再自己拼一套。
+
+### 调用点排版
+
+启动协程或注册事件读作 **启动前缀 + 空格 + 完整的 C++ lambda**。前缀自己的实参不拆开：`bbtco_noexcept(&ok) [state]() { … };`、`bbtco_desc("read") [fd]() { … };`、`bbtco_ev_r(fd) [state](int fd, short ev) { … };`（含协程池变体）。从 `[` 起按 lambda 而不是普通函数定义排版；无参也显式写 `()`，无参空体写 `bbtco [](){};`。真实参数、`mutable`、返回类型及捕获方式保持原意。普通 lambda 不强制补 `()`。`bbtco_ref`、`bbtco_defer` 的宏已提供捕获和参数，调用处只跟代码块。
+
+表达式前留一个空格：`bbt_co_await Read()`、`bbt_co_fire op`、`bbt_co_return -1`；已有的括号属于操作数，写 `bbt_co_return (a + b)`。不要为了排版额外加括号。函数式或类型式写法如 `bbt_co_return_ref(value)`、`bbt_co_bind(f)`、`bbt_co_async(T)`、`bbtco_wait_for(...)`、`bbtco_sleep(ms)`、`bbtco_make_*()` 不加这一格；`bbtco_yield;`、`bbt_co_return_void;` 的分号前也不加。
 
 ## 2 用确定性机制约束异步调用
 

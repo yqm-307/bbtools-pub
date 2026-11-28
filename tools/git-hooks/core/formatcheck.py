@@ -1,20 +1,23 @@
-"""clang-format dry run over the C/C++ files of one base..tree change, shared by commit and push."""
+"""Compare frozen Git blobs with the public formatter, for both commit and push."""
 from pathlib import Path
 import subprocess
+import sys
 from runner import HookError
-from staged import cxx_files, text
+from staged import cxx_files
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'format'))
+from cpp_format import format_source
 
 
 def violations(ctx):
     problems = []
     for path in cxx_files(ctx):
-        p = subprocess.run([ctx['config']['format']['binary'], '--dry-run', '--Werror',
-                            '--style=file', '--fallback-style=none', f'--assume-filename={path}'],
-                           input=text(ctx, path), text=True, capture_output=True)
         parent = Path(path).absolute().parent
         if not any((p / '.clang-format').is_file() or (p / '_clang-format').is_file()
                    for p in (parent, *parent.parents)):
             raise HookError(f'{path}: missing .clang-format')
-        if p.returncode:
-            problems.append(f'{path}: {p.stderr.strip()}')
+        source = subprocess.check_output(['git', 'cat-file', 'blob', f'{ctx["tree"]}:{path}'], timeout=30)
+        formatted = format_source(ctx['config']['format']['binary'], path, source)
+        if formatted is not None and formatted != source:
+            problems.append(f'{path}: C/C++ format differs')
     return problems

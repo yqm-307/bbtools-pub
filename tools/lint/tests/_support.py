@@ -39,7 +39,7 @@ class LintCase(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='bbt-lint-')
         self.base = Path(self.temp.name)
         self.tools = self.base / 'tools'
-        for name in ('lint', 'git-hooks'):
+        for name in ('lint', 'git-hooks', 'format'):
             shutil.copytree(PUB / name, self.tools / name,
                             ignore=shutil.ignore_patterns('__pycache__', 'tests'))
         self.root = self.base / 'src'
