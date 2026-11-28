@@ -12,6 +12,8 @@ LEXEMES = re.compile(
     r'|\b\d[\w.\x27]*|(?:u8|u|U|L)?"(?:\\[\s\S]|[^"\\])*"'
     r"|'(?:\\[\s\S]|[^'\\])+'")
 CLASSES = re.compile(r'\b(class|struct)\s+(\w+)\s*(?:final\s*)?(?::[^;{}]+)?\s*\{')
+# The backslash is already consumed by [^\n]*; diagnostics and masking must span the same logical line.
+DIRECTIVE_BODY = r'[^\n]*(?:(?<=\\)\n[^\n]*)*'
 
 
 @dataclass
@@ -106,11 +108,11 @@ class Source:
         # Unconsumed quote/comment openers indicate malformed or unsupported lexemes.
         if re.search(r'["\x27]|/\*', code):
             self.incomplete(1, 'incomplete: unterminated or unsupported literal/comment')
-        for directive in re.finditer(r'^\s*#\s*(if\w*|elif|else|define)\b[^\n]*(?:\\\n[^\n]*)*', code, re.M):
+        for directive in re.finditer(r'^\s*#\s*(if\w*|elif|else|define)\b' + DIRECTIVE_BODY, code, re.M):
             if directive[1] == 'define' and not re.search(r'\([^)]*\)|\S+\s+\S+', directive[0].split('define', 1)[1].strip()):
                 continue
             self.incomplete(line(directive.start()), 'incomplete: preprocessor branches/macros not expanded')
-        code = re.sub(r'^\s*#[^\n]*(?:\\\n[^\n]*)*', lambda m: blank(m[0]), code, flags=re.M)
+        code = re.sub(r'^\s*#' + DIRECTIVE_BODY, lambda m: blank(m[0]), code, flags=re.M)
         pairs = {}
         stack = []
         for i, char in enumerate(code):
