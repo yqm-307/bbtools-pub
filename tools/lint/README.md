@@ -189,6 +189,32 @@ Git 专用脚本通过返回 0；违规退出 1，并在 stdout 输出一个 JSO
 | T501 | 标识符含大写 V 加数字；不查字符串、注释、数字值，不自动改名 |
 | T601 | 生产范围标识符含 ForTest/TestAccess/for_test/test_inject；不追踪匿名测试全局状态 |
 | `coroutine-sugar` | 按标识符筛查协程低层调用（Scheduler、Coroutine、同步原语、async 内部接口）候选；默认关闭，严格仓库显式启用；例外写法见 [协程语法糖](../../docs/cpp/coroutine.md#3-用-lint-固化语法糖边界) |
+|| `func-naming` | 函数命名人工复核候选：首词不在允许动词表、复杂词可换简单词、口语/占位词、词数超过 `max_words = 6` 四类；豁免构造/析构、运算符、main、全大写宏调用、override/final 与标准库兼容接口名（比较不分大小写，`Size`/`PushBack`/`owns_lock` 同款放行）；单词惯用名（`size`、`count`、`close`、`ready` 等只有一个词就能达意的访问器/状态词）与 `As`/`From`/`To` 开头的转换函数不报首词；默认关闭，加入 `[scan].rules` 或 hook 阶段 rules 启用；词表在 `rules/func-naming/main.py` 维护，语义正文见 `third-party/bbt-agent-toolkit/standards/general/naming.md`「函数命名」一节 |
+
+`func-naming` 的覆盖上限：词法提取不展开宏，含续行 `#define` 的文件跳过自由函数提取（漏报不报假），单行宏调用、复杂声明符与已发布公开 API 按人工复核处理；实参被完全屏蔽的对象初始化（如 `static Metrics g_metrics("name")`）与函数声明词法上不可区分，可能误报。误报用 `[[exclude]]` 按符号抑制；path/symbol 都是 fnmatch glob 且 `*` 可跨 `/`，三个常用写法：
+
+```toml
+# 测试/示例目录整体不参与命名复核
+[[exclude]]
+rule = "func-naming"
+path = "tests/**"
+symbol = "*"
+reason = "测试用例名按场景描述，不按动词+对象约束"
+
+# 项目家族前缀（后面接的部分本身合规）
+[[exclude]]
+rule = "func-naming"
+path = "*"
+symbol = "Hook_*"
+reason = "Hook_ 家族前缀是对系统调用的同名封装，命名由拦截契约固定"
+
+# libc 同名拦截入口所在的文件
+[[exclude]]
+rule = "func-naming"
+path = "src/net/Hook.cc"
+symbol = "*"
+reason = "socket/close/usleep 等 libc 同名拦截函数是已发布符号，不可改名"
+```
 
 ## 覆盖边界与验证
 

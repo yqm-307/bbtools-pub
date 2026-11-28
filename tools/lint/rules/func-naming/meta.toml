@@ -1,0 +1,9 @@
+id = "func-naming"
+interface = "cpp"
+kind = "auto"
+title = "函数命名人工复核候选"
+fix = "人工核对候选：首词用简单行为动词、复杂词换简单词、去掉口语词、过长的名字拆职责或收进参数；语义约定见 third-party/bbt-agent-toolkit/standards/general/naming.md"
+docs = "tools/lint/README.md"
+default_enabled = false
+[options]
+max_words = 6
